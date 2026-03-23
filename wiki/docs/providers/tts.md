@@ -4,28 +4,16 @@
 
 | Provider | Features |
 |----------|----------|
-| `inworld` | Inworld TTS, cloud-based, high quality |
+| `configurable` | Modular TTS provider system |
 
 ## Configuration
 
 ```bash
-TTS_PROVIDER=inworld
-INWORLD_VOICE=Ashley
+TTS_PROVIDER=your-provider
+VOICE=your-voice
 ```
 
-## Inworld TTS
-
-### Available Voices
-- Ashley
-- Ryan
-- And more...
-
-### Audio Output
-- **Sample Rate:** 24,000 Hz (24kHz)
-- **Format:** PCM16
-- **Channels:** Mono
-
-### Usage
+## Usage
 
 ```json
 {
@@ -36,3 +24,8 @@ INWORLD_VOICE=Ashley
   }
 }
 ```
+
+## Audio Output
+- **Sample Rate:** 24,000 Hz (24kHz)
+- **Format:** PCM16
+- **Channels:** Mono

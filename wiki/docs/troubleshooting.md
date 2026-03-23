@@ -283,7 +283,7 @@ audioSource.onended = () => {
 ```
 
 **Solutions for high latency:**
-- Switch to streaming STT (AssemblyAI, Fennec)
+- Switch to streaming STT (when available)
 - Use faster LLM model
 - Reduce audio chunk size
 - Enable WebSocket compression

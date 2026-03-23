@@ -7,7 +7,7 @@ Get started with voice agents using the OpenAI Agents SDK connected to your own 
 This quickstart will guide you through creating a browser-based voice agent that connects to your custom real-time API server hosted at `your-engine.example.com`. The server uses:
 - **Model**: OpenAI GPT-OSS 120B (120B parameter model running on Groq at ~500 tokens/sec)
 - **STT**: Groq Whisper Large V3
-- **TTS**: Inworld (cloud high-quality synthesis)
+- **TTS**: Modular provider system (configurable)
 - **Transport**: WebSocket
 
 ## Prerequisites
@@ -241,7 +241,7 @@ Navigate to the page in your browser. You should see:
 
 ### Customizing Voice
 
-Your server supports Inworld TTS voices. You can specify the voice when generating the ephemeral token:
+Your server supports configurable TTS voices. You can specify the voice when generating the ephemeral token:
 
 ```typescript
 const response = await fetch('https://your-engine.example.com/v1/realtime/sessions', {
@@ -252,7 +252,7 @@ const response = await fetch('https://your-engine.example.com/v1/realtime/sessio
   },
   body: JSON.stringify({
     model: 'moonshotai/kimi-k2-instruct-0905',
-    voice: 'Ashley',  // Inworld voice name
+    voice: 'Ashley',  // Configured TTS voice
   }),
 });
 ```
@@ -260,9 +260,7 @@ const response = await fetch('https://your-engine.example.com/v1/realtime/sessio
 **Available Voices** (default: `Ashley`):
 - `Ashley` - Natural US English female voice
 - `Brian` - Natural US English male voice
-- Additional voices available via Inworld API. See [Inworld documentation](https://docs.inworld.ai) for full list.
-
-> **Note**: Voice names follow Inworld's naming convention. If you specify an unsupported voice, it will automatically fallback to the default.
+- Voice names depend on your TTS provider configuration.
 
 ### Session Configuration
 
@@ -290,9 +288,9 @@ Your custom server has a few differences from OpenAI's official Realtime API:
 | **Model** | `gpt-4o-realtime-preview-2024-10-01` | `moonshotai/kimi-k2-instruct-0905` |
 | **Base URL** | `wss://api.openai.com/v1/realtime` | `wss://your-engine.example.com/v1/realtime` |
 | **Token Endpoint** | `/v1/realtime/client_secrets` | `/v1/realtime/sessions` |
-| **Voices** | `alloy`, `echo`, `ash`, `fable`, `onyx`, `nova` | `Ashley`, `Brian`, etc. (Inworld voices) |
+| **Voices** | `alloy`, `echo`, `ash`, `fable`, `onyx`, `nova` | Configurable voices |
 | **Transport** | WebRTC (browser) + WebSocket (server) | WebSocket only |
-| **TTS** | Remote API | Inworld TTS (cloud) |
+| **TTS** | Remote API | Modular provider system |
 | **Model Provider** | OpenAI proprietary | Groq (OpenAI GPT-OSS 120B) |
 | **Speed** | ~100-200 tps | ~500 tps (via Groq LPU) |
 
@@ -425,7 +423,6 @@ const history = session.getHistory();
 - **Voice Agents Guide**: [https://openai.github.io/openai-agents-js/guides/voice-agents/overview/](https://openai.github.io/openai-agents-js/guides/voice-agents/overview/)
 - **Transport Mechanisms**: [https://openai.github.io/openai-agents-js/guides/voice-agents/transport-mechanisms/](https://openai.github.io/openai-agents-js/guides/voice-agents/transport-mechanisms/)
 - **Moonshot Kimi K2 Instruct 0905**: [https://platform.moonshot.cn/docs/intro](https://platform.moonshot.cn/docs/intro)
-- **Inworld AI**: [https://www.inworld.ai](https://www.inworld.ai)
 
 ---
 

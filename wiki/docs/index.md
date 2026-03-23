@@ -68,10 +68,10 @@ Server runs at `http://localhost:8787`.
 - [Authentication](/api/authentication) - Token generation and validation
 - [Events Reference](/api/events) - All WebSocket events
 
-### ⚙️ Providers
+### Providers
 
-- [Speech-to-Text](/providers/stt) - Groq Whisper, AssemblyAI, Fennec
-- [Text-to-Speech](/providers/tts) - Inworld TTS configuration
+- [Speech-to-Text](/providers/stt) - Groq Whisper
+- [Text-to-Speech](/providers/tts) - Modular TTS system
 - [LLM](/providers/llm) - Groq, OpenRouter, and models
 - [Voice Activity Detection](/providers/vad) - VAD configuration
 
@@ -117,13 +117,12 @@ Server runs at `http://localhost:8787`.
           └─────────┴───────┘
 ```
 
-**Runtime:** Cloudflare Workers (Edge)
-**State:** Durable Objects
+**Runtime:** Bun / Node.js
 **Auth:** JWT (jose)
-**WebSocket:** Native Workers API
+**WebSocket:** Native WebSocket API
 **LLM:** Groq / OpenRouter (500+ tok/s)
-**STT:** AssemblyAI / Groq Whisper / Fennec
-**TTS:** Inworld
+**STT:** Groq Whisper
+**TTS:** Modular provider system
 
 ---
 

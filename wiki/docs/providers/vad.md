@@ -5,8 +5,6 @@
 | Provider | Features |
 |----------|----------|
 | `silero` | Silero VAD, local, standalone |
-| `fennec-integrated` | Integrated with Fennec ASR |
-| `assemblyai-integrated` | Integrated with AssemblyAI |
 | `none` | Disable VAD |
 
 ## Configuration

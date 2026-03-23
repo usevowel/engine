@@ -1,8 +1,7 @@
 # Provider System
 
 This directory contains the shared provider abstractions and factories.
-Concrete public/shared provider implementations now live in `engine/packages/provider-*`.
-Hosted-only provider implementations live in `engine-hosted/packages/provider-*`.
+Concrete provider implementations live in `packages/provider-*`.
 
 ## Structure
 
@@ -25,12 +24,10 @@ providers/
 ## Concrete Provider Packages
 
 - `packages/provider-groq-whisper-stt`
-- `engine-hosted/packages/provider-fennec-stt`
-- `engine-hosted/packages/provider-assemblyai-stt`
 - `packages/provider-mistral-voxtral-realtime-stt`
-- `engine-hosted/packages/provider-inworld-tts`
-- `engine-hosted/packages/provider-fennec-vad`
 - `packages/provider-silero-vad`
+
+Additional provider packages can be added to the `packages/` directory.
 
 ## Usage
 

@@ -1,17 +1,16 @@
 # Architecture Overview
 
-The sndbrd voice engine is built on Cloudflare Workers with a modular, event-driven architecture for real-time voice interactions.
+The vowel engine is built with a modular, event-driven architecture for real-time voice interactions.
 
 ## Tech Stack
 
 | Component | Technology | Purpose |
 |-----------|------------|---------|
-| **Runtime** | Cloudflare Workers | Global edge network, low latency |
-| **State** | Durable Objects | Stateful WebSocket sessions |
-| **WebSocket** | Native Workers API | Built-in WebSocket support |
+| **Runtime** | Bun / Node.js | Self-hosted runtime |
+| **WebSocket** | Native WebSocket API | Bidirectional communication |
 | **LLM** | Groq / OpenRouter | Fast inference, multiple models |
-| **STT** | AssemblyAI / Groq Whisper / Fennec | Audio transcription |
-| **TTS** | Inworld | Speech synthesis |
+| **STT** | Groq Whisper | Audio transcription |
+| **TTS** | Modular provider system | Speech synthesis |
 | **Auth** | jose (JWT) | Ephemeral token generation |
 
 ## Core Principles

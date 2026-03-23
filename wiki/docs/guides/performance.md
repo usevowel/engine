@@ -314,7 +314,7 @@ graph TB
 **Symptoms:** Long delay after speech ends
 
 **Solutions:**
-- Switch to streaming STT (AssemblyAI, Fennec)
+- Switch to streaming STT (when available)
 - Reduce audio buffer size
 - Lower VAD threshold
 

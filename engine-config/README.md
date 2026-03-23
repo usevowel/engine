@@ -1,33 +1,28 @@
-# Engine Configuration (R2)
+# Engine Configuration
 
-YAML configuration for the sndbrd engine. Stored in R2 at `sndbrd-store/config/{environment}.yaml`.
+YAML configuration for the vowel engine. Used for runtime presets and settings.
 
 ## Structure
 
-- `config/{environment}.yaml` in R2 bucket `sndbrd-store`
-- Environments: `testing`, `dev`, `staging`, `production`, `billing-test`
-
-## Billing
-
-- **billing.enabled:** `false` = disable billing (same as TEST_MODE). `true` or omitted = enabled.
-- **Meter name:** `voice_hours` (matches fixtures `meters[].name`)
+- `config/{environment}.yaml` - Environment-specific configurations
+- Environments: `testing`, `dev`, `staging`, `production`
 
 ## Secrets & Runtime Overrides
 
-- **secrets:** API keys (GROQ, OpenRouter, Cerebras, AssemblyAI, Inworld, Fennec, Polar, PostHog). Env vars override YAML.
+- **secrets:** API keys (GROQ, OpenRouter, Cerebras). Env vars override YAML.
 - **runtime:** Any env var override (TEST_MODE, STT_PROVIDER, etc.)
 - **settings.agent:** Agent config (useModularAgents, defaultType, maxSteps, etc.)
 
-## Pushing to R2
+## Pushing Configuration
 
-From the sndbrd engine root:
+From the engine root:
 
 ```bash
 # Push all environments
 bun run engine-config:push
 
 # Push specific environment(s)
-bun run engine-config:push testing dev staging production billing-test
+bun run engine-config:push testing dev staging production
 ```
 
 Or from the engine-config directory:
@@ -38,30 +33,15 @@ bun run scripts/push-to-r2.ts
 ```
 
 **Prerequisites:**
-
-- **S3 API mode:** Set `R2_ACCESS_KEY`, `R2_SECRET_ACCESS_KEY`, `R2_ACCOUNT_ID` in `.dev.vars`
-- **Wrangler mode:** `bunx wrangler login` and `account_id` in wrangler.toml (or `CLOUDFLARE_ACCOUNT_ID`)
-
-Or manually:
-
-```bash
-wrangler r2 object put sndbrd-store/config/production.yaml \
-  --file=./engine-config/production.yaml \
-  --content-type=text/yaml
-```
+- Set `R2_ACCESS_KEY`, `R2_SECRET_ACCESS_KEY`, `R2_ACCOUNT_ID` in environment
 
 ## Config Format
 
 Each YAML file contains:
 
-1. **presets** – Provider stacks (LLM + TTS + STT) with billing metadata
-2. **settings** – Engine runtime settings (VAD, turn detection, call limits, agent, etc.)
-3. **billing** – Billing tiers, token conversion, Polar meter config. `billing.enabled: false` disables billing (same as TEST_MODE).
-
-Hosted `platform` should consume preset metadata from this R2-backed source or a cache derived from it, while hosted token issuance should pass preset identifiers and let the engine resolve the provider/model/voice stack.
-
-See [config-refactor plan](../../../.ai/plans/sndbrd-v2.0/config-refactor/README.md) for full schema.
+1. **presets** - Provider stacks (LLM + TTS + STT)
+2. **settings** - Engine runtime settings (VAD, turn detection, call limits, agent, etc.)
 
 ## Fallback
 
-When R2 config is unavailable, the engine uses env vars and `DEFAULT_BILLING_CONFIG` from `billing-config-loader.ts`.
+When external config is unavailable, the engine uses env vars.

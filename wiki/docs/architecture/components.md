@@ -49,9 +49,9 @@ Streams responses from LLM providers (Groq/OpenRouter).
 Converts audio to text via STT providers.
 
 ### TTS Service
-**File:** `src/services/providers/tts/InworldTTS.ts`
+**File:** `src/services/providers/tts/`
 
-Synthesizes speech using Inworld TTS API.
+Synthesizes speech using modular TTS provider system.
 
 ## Authentication
 **File:** `src/auth/token-generator.ts`
