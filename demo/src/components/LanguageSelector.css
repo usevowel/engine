@@ -1,0 +1,115 @@
+/**
+ * Language Selector Styles
+ */
+
+.language-selector {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 1rem;
+  background: var(--card-bg, #f5f5f5);
+  border-radius: 8px;
+  margin-bottom: 1rem;
+}
+
+.language-selector-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.language-selector-label {
+  font-weight: 500;
+  color: var(--text-primary, #333);
+  min-width: 100px;
+}
+
+.language-selector-select {
+  flex: 1;
+  padding: 0.5rem;
+  border: 1px solid var(--border-color, #ddd);
+  border-radius: 4px;
+  background: white;
+  font-size: 0.95rem;
+  cursor: pointer;
+}
+
+.language-selector-select:disabled {
+  background: var(--disabled-bg, #f0f0f0);
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.language-selector-checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+  font-size: 0.9rem;
+  color: var(--text-secondary, #666);
+}
+
+.language-selector-checkbox {
+  cursor: pointer;
+}
+
+.language-selector-checkbox:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.language-selector-note {
+  font-size: 0.85rem;
+  color: var(--text-secondary, #999);
+  font-style: italic;
+}
+
+.language-selector-info {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  padding: 0.75rem;
+  background: var(--info-bg, #e3f2fd);
+  border-left: 3px solid var(--info-border, #2196f3);
+  border-radius: 4px;
+  font-size: 0.85rem;
+  color: var(--info-text, #1976d2);
+  margin-top: 0.5rem;
+}
+
+.info-icon {
+  font-size: 1rem;
+  flex-shrink: 0;
+}
+
+.info-text {
+  flex: 1;
+  line-height: 1.4;
+}
+
+/* Dark mode support */
+@media (prefers-color-scheme: dark) {
+  .language-selector {
+    background: var(--card-bg-dark, #2a2a2a);
+  }
+  
+  .language-selector-label {
+    color: var(--text-primary-dark, #e0e0e0);
+  }
+  
+  .language-selector-select {
+    background: var(--input-bg-dark, #333);
+    border-color: var(--border-color-dark, #444);
+    color: var(--text-primary-dark, #e0e0e0);
+  }
+  
+  .language-selector-checkbox-label {
+    color: var(--text-secondary-dark, #b0b0b0);
+  }
+  
+  .language-selector-info {
+    background: var(--info-bg-dark, #1e3a5f);
+    border-color: var(--info-border-dark, #4a90e2);
+    color: var(--info-text-dark, #90caf9);
+  }
+}

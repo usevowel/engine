@@ -1,0 +1,11 @@
+{
+  "name": "@vowel/provider-groq-whisper-stt",
+  "version": "0.1.0",
+  "description": "Groq Whisper STT provider for sndbrd",
+  "license": "UNLICENSED",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  }
+}

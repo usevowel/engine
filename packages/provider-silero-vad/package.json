@@ -1,0 +1,11 @@
+{
+  "name": "@vowel/provider-silero-vad",
+  "version": "0.1.0",
+  "description": "Silero VAD provider for sndbrd",
+  "license": "UNLICENSED",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  }
+}

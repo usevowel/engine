@@ -1,0 +1,24 @@
+{
+  "name": "sndbrd-wiki",
+  "version": "1.0.0",
+  "description": "VitePress wiki for sndbrd voice engine documentation",
+  "type": "module",
+  "scripts": {
+    "dev": "vitepress dev docs",
+    "build": "vitepress build docs",
+    "preview": "vitepress preview docs"
+  },
+  "dependencies": {
+    "vitepress": "^1.6.4",
+    "vue": "^3.5.22",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "mermaid": "^11.3.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.0.6",
+    "@types/react-dom": "^19.0.3",
+    "@vitejs/plugin-react": "^5.0.4",
+    "vitepress-plugin-mermaid": "^2.0.3"
+  }
+}

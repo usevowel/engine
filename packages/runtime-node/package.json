@@ -1,0 +1,56 @@
+{
+  "name": "@vowel/runtime-node",
+  "version": "0.1.0",
+  "description": "Self-hosted Node.js/Bun runtime for sndbrd",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.js",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "files": [
+    "dist/**/*",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsup src/index.ts --format cjs,esm",
+    "dev": "tsup src/index.ts --format cjs,esm --watch",
+    "start": "node dist/index.js",
+    "test": "vitest",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "ws": "^8.16.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/ws": "^8.5.0",
+    "tsup": "^8.0.0",
+    "typescript": "^5.3.0",
+    "vitest": "^1.0.0"
+  },
+  "optionalDependencies": {
+    "ioredis": "^5.3.0",
+    "better-sqlite3": "^9.0.0",
+    "onnxruntime-node": "^1.16.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/usevowel/sndbrd.git",
+    "directory": "packages/runtime-node"
+  },
+  "keywords": [
+    "voice",
+    "ai",
+    "runtime",
+    "self-hosted",
+    "websocket"
+  ]
+}

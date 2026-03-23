@@ -1,0 +1,59 @@
+{
+  "name": "sndbrd",
+  "version": "0.1.0",
+  "description": "OpenAI-compatible real-time voice API engine powered by Groq and Inworld TTS",
+  "type": "module",
+  "private": true,
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "echo 'Hosted Cloudflare runtime moved to engine-hosted. Use packages/runtime-node for self-hosted runtime work.' && exit 1",
+    "build": "bun run --filter './packages/runtime-node' build",
+    "build:packages": "bun run build",
+    "setup": "bun run scripts/setup.ts",
+    "download-voice": "bun run scripts/download-voice.ts",
+    "download-vad": "./scripts/download-vad-model.sh",
+    "test:connection": "bun run test/connection-test.ts",
+    "test:browser": "bun run test/browser-connection-test.ts",
+    "test:playwright": "playwright test",
+    "test:token": "bun run scripts/test-token-decoding.ts",
+    "postinstall": "./scripts/patch-ws-for-workers.sh",
+    "version": "bun run scripts/version.ts",
+    "version:major": "bun run scripts/version.ts --type major",
+    "version:minor": "bun run scripts/version.ts --type minor",
+    "version:patch": "bun run scripts/version.ts --type patch",
+    "version:check": "bun run scripts/version.ts --dry-run",
+    "test": "bun test",
+    "test:config": "bun test test/r2-config-loader.test.ts"
+  },
+  "dependencies": {
+    "@ai-sdk/cerebras": "^1.0.31",
+    "@ai-sdk/groq": "2.0.29",
+    "@ai-sdk/provider": "3.0.3",
+    "@aws-sdk/client-s3": "^3.987.0",
+    "@openrouter/ai-sdk-provider": "1.2.2",
+    "ai": "^5.0.93",
+    "assemblyai": "^4.22.1",
+    "franc": "^6.2.0",
+    "fuzzball": "^2.2.3",
+    "jose": "^5.2.0",
+    "rxjs": "^7.8.2",
+    "workers-ai-provider": "^2.0.0",
+    "zod": "^4.1.12"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20241127.0",
+    "@openai/agents": "^0.3.0",
+    "@playwright/test": "^1.56.1",
+    "@types/js-yaml": "^4.0.9",
+    "@types/franc": "^6.0.0",
+    "@types/jscodeshift": "^17.3.0",
+    "@types/node": "^20.0.0",
+    "esbuild": "^0.27.0",
+    "js-yaml": "^4.1.0",
+    "jscodeshift": "^17.3.0",
+    "playwright": "^1.56.1",
+    "ws": "^8.18.3"
+  }
+}

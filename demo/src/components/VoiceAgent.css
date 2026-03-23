@@ -1,0 +1,10 @@
+/**
+ * Voice Agent Component Styles
+ */
+
+.voice-agent {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+

@@ -1,0 +1,113 @@
+/**
+ * Status Indicator Styles
+ */
+
+.status-indicator {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 20px;
+  border-radius: 10px;
+  border: 2px solid;
+  transition: all 0.3s ease;
+}
+
+.status-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.status-message {
+  font-size: 16px;
+  font-weight: 500;
+}
+
+/* Idle */
+.status-idle {
+  background: #f5f5f5;
+  border-color: #ddd;
+}
+
+.status-idle .status-dot {
+  background: #999;
+}
+
+.status-idle .status-message {
+  color: #666;
+}
+
+/* Connecting */
+.status-connecting {
+  background: #fff3cd;
+  border-color: #ffeaa7;
+}
+
+.status-connecting .status-dot {
+  background: #856404;
+  animation: pulse 1s ease-in-out infinite;
+}
+
+.status-connecting .status-message {
+  color: #856404;
+}
+
+/* Connected */
+.status-connected {
+  background: #d4edda;
+  border-color: #c3e6cb;
+}
+
+.status-connected .status-dot {
+  background: #155724;
+}
+
+.status-connected .status-message {
+  color: #155724;
+}
+
+/* Listening */
+.status-listening {
+  background: #cfe2ff;
+  border-color: #9ec5fe;
+}
+
+.status-listening .status-dot {
+  background: #084298;
+  animation: pulse 2s ease-in-out infinite;
+}
+
+.status-listening .status-message {
+  color: #084298;
+}
+
+/* Speaking */
+.status-speaking {
+  background: #e0cffc;
+  border-color: #c29ffa;
+}
+
+.status-speaking .status-dot {
+  background: #6f42c1;
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+.status-speaking .status-message {
+  color: #6f42c1;
+}
+
+/* Error */
+.status-error {
+  background: #f8d7da;
+  border-color: #f5c6cb;
+}
+
+.status-error .status-dot {
+  background: #721c24;
+}
+
+.status-error .status-message {
+  color: #721c24;
+}
+

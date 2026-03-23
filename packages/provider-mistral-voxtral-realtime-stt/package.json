@@ -1,0 +1,11 @@
+{
+  "name": "@vowel/provider-mistral-voxtral-realtime-stt",
+  "version": "0.1.0",
+  "description": "Mistral Voxtral realtime STT provider for sndbrd",
+  "license": "UNLICENSED",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  }
+}

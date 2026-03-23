@@ -1,0 +1,109 @@
+/**
+ * Transcript Styles
+ */
+
+.transcript {
+  background: #f8f9fa;
+  border-radius: 10px;
+  padding: 20px;
+  max-height: 400px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+.transcript-empty {
+  text-align: center;
+  color: #999;
+  padding: 40px 20px;
+}
+
+.transcript-message {
+  padding: 15px;
+  border-radius: 8px;
+  animation: fadeIn 0.3s ease-out;
+}
+
+.message-role {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  margin-bottom: 5px;
+  opacity: 0.7;
+}
+
+.message-text {
+  font-size: 14px;
+  line-height: 1.6;
+  margin-bottom: 5px;
+}
+
+.message-time {
+  font-size: 11px;
+  opacity: 0.5;
+  text-align: right;
+}
+
+/* User messages */
+.role-user {
+  background: #e3f2fd;
+  border-left: 4px solid #2196f3;
+}
+
+.role-user .message-role {
+  color: #1976d2;
+}
+
+.role-user .message-text {
+  color: #0d47a1;
+}
+
+/* Assistant messages */
+.role-assistant {
+  background: #f3e5f5;
+  border-left: 4px solid #9c27b0;
+}
+
+.role-assistant .message-role {
+  color: #7b1fa2;
+}
+
+.role-assistant .message-text {
+  color: #4a148c;
+}
+
+/* System messages */
+.role-system {
+  background: #fff3e0;
+  border-left: 4px solid #ff9800;
+}
+
+.role-system .message-role {
+  color: #f57c00;
+}
+
+.role-system .message-text {
+  color: #e65100;
+  font-style: italic;
+}
+
+/* Scrollbar styling */
+.transcript::-webkit-scrollbar {
+  width: 8px;
+}
+
+.transcript::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 10px;
+}
+
+.transcript::-webkit-scrollbar-thumb {
+  background: #888;
+  border-radius: 10px;
+}
+
+.transcript::-webkit-scrollbar-thumb:hover {
+  background: #555;
+}
+

@@ -1,0 +1,99 @@
+.provider-model-selector {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 1rem;
+  background: #1a1a1a;
+  border-radius: 8px;
+  border: 1px solid #333;
+  margin-bottom: 1rem;
+}
+
+.provider-model-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.provider-model-label {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: #ccc;
+  min-width: 80px;
+}
+
+.provider-model-select {
+  flex: 1;
+  padding: 0.5rem 0.75rem;
+  background: #2a2a2a;
+  border: 1px solid #444;
+  border-radius: 6px;
+  color: #fff;
+  font-size: 0.875rem;
+  cursor: pointer;
+  transition: border-color 0.2s;
+}
+
+.provider-model-select:hover:not(:disabled) {
+  border-color: #666;
+}
+
+.provider-model-select:focus {
+  outline: none;
+  border-color: #4a9eff;
+  box-shadow: 0 0 0 3px rgba(74, 158, 255, 0.1);
+}
+
+.provider-model-select:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.provider-model-custom-input {
+  flex: 1;
+  padding: 0.5rem 0.75rem;
+  background: #2a2a2a;
+  border: 1px solid #444;
+  border-radius: 6px;
+  color: #fff;
+  font-size: 0.875rem;
+  font-family: 'Courier New', monospace;
+  transition: border-color 0.2s;
+}
+
+.provider-model-custom-input:hover:not(:disabled) {
+  border-color: #666;
+}
+
+.provider-model-custom-input:focus {
+  outline: none;
+  border-color: #4a9eff;
+  box-shadow: 0 0 0 3px rgba(74, 158, 255, 0.1);
+}
+
+.provider-model-custom-input:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.provider-model-custom-input::placeholder {
+  color: #666;
+}
+
+.provider-model-note {
+  font-size: 0.75rem;
+  color: #888;
+  font-style: italic;
+}
+
+.provider-model-info {
+  font-size: 0.75rem;
+  color: #4a9eff;
+  padding-top: 0.25rem;
+  border-top: 1px solid #333;
+}
+
+.provider-model-info strong {
+  color: #fff;
+  font-weight: 600;
+}

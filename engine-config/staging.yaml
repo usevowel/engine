@@ -1,0 +1,142 @@
+# SNDBRD Engine Configuration - Staging Environment
+# Stored in R2: sndbrd-store/config/staging.yaml
+# Used when deploying with: wrangler deploy --env staging
+
+version: "1.0.0"
+lastUpdated: "2026-02-09T00:00:00Z"
+environment: "staging"
+
+# ============================================================================
+# Provider Stack Presets
+# ============================================================================
+# Prime: Vowel Prime 1 branded model - matches AutoParts demo config in sales repo
+# - Groq GPT-OSS-120B, Server VAD (AssemblyAI integrated), Inworld TTS
+presets:
+  prime:
+    name: "Prime"
+    description: "Vowel Prime 1 - Groq GPT-OSS-120B, Server VAD (AssemblyAI), Inworld TTS"
+    llm:
+      provider: "groq"
+      model: "openai/gpt-oss-120b"
+      tokensPerHourRate: 100000
+      costMultiplier: 0.8
+    stt:
+      provider: "assemblyai"
+      sampleRate: 24000
+      encoding: "pcm_s16le"
+      costPerHour: 0.05
+    tts:
+      provider: "inworld"
+      voice: "Alex"
+      sampleRate: 24000
+      costPerHour: 0.10
+    vad:
+      provider: "assemblyai-integrated"
+      enabled: true
+
+defaultPreset: "prime"
+
+# ============================================================================
+# Engine Runtime Settings
+# ============================================================================
+settings:
+  # Server VAD (from AutoParts: threshold 0.5, prefixPaddingMs 350, silenceDurationMs 550)
+  vad:
+    enabled: true
+    threshold: 0.5
+    minSilenceMs: 550
+    speechPadMs: 350
+
+  turnDetection:
+    enabled: false
+    provider: "groq"
+    model: "llama-3.1-8b-instant"
+    debounceMs: 150
+    timeoutMs: 3000
+
+  languageDetection:
+    enabled: true
+
+  callDuration:
+    maxCallDurationMs: 1800000
+    maxIdleDurationMs: 600000
+
+  agent:
+    useModularAgents: true
+    defaultType: "custom"
+    disableStreaming: false
+    maxStreamRetries: 3
+    maxToolRetries: 3
+    maxSteps: 30
+    defaultTemperature: null
+    defaultFrequencyPenalty: 1.2
+    defaultPresencePenalty: 1.2
+    defaultRepetitionPenalty: 1.2
+
+  speech:
+    defaultMode: "implicit"
+
+  subagent:
+    enabled: false
+    model: null
+    provider: null
+    temperature: 0.3
+    maxTokens: 2000
+
+  posthog:
+    enabled: true
+    host: "https://app.posthog.com"
+
+  acknowledgement:
+    enabled: false
+    delayMs: 300
+    phrases: ["okay"]
+
+  typingSound:
+    enabled: false
+    r2Key: "typing-sound.pcm"
+    volume: 0.3
+    loopDurationMs: 2000
+
+  clickSound:
+    r2Key: "mouse-click-sound.pcm"
+    probability: 0.15
+
+  audio:
+    sampleRate: 24000
+    format: "pcm16"
+    channels: 1
+
+# ============================================================================
+# Billing Configuration
+# ============================================================================
+billing:
+  polar:
+    meter: "voice_hours"
+  tokenConversion:
+    tokensPerHourRate: 80000
+  tiers:
+    free:
+      name: "Free"
+      hourlyRate: 0.00
+      tokensPerHourAllowance: 10000
+      overageRatePerHour: null
+    starter:
+      name: "Starter"
+      hourlyRate: 6.00
+      tokensPerHourAllowance: 50000
+      overageRatePerHour: 3.00
+    growth:
+      name: "Growth"
+      hourlyRate: 4.80
+      tokensPerHourAllowance: 200000
+      overageRatePerHour: 2.40
+    pro:
+      name: "Pro"
+      hourlyRate: 3.60
+      tokensPerHourAllowance: 1000000
+      overageRatePerHour: 1.80
+  defaultTier: "starter"
+  abandonment:
+    timeoutMs: 30000
+    minimumBillingHours: 0.001

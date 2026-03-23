@@ -1,0 +1,139 @@
+# .references
+# Dependencies
+node_modules/
+bun.lockb
+
+.wrangler
+
+# Environment
+.env
+.env.local
+.env.*.local
+.dev.vars
+.dev.vars.*
+
+# Build output
+dist/
+*.log
+
+# Compiled binaries and libraries
+*.exe
+*.dll
+*.so
+*.so.*
+*.dylib
+*.a
+*.lib
+*.out
+*.app
+
+# C/C++ artifacts
+*.o
+*.obj
+*.d
+*.dep
+*.cmake
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+Makefile
+
+# Python artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.Python
+venv/
+.venv/
+ENV/
+env/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+debug_*.wav
+
+# Voice models and assets
+voices/*.onnx
+voices/*.onnx.json
+
+# Piper models (large files)
+vendor/piper-models/*.onnx
+vendor/piper-models/*.bin
+
+# Piper TTS Web (not needed for Workers deployment)
+vendor/piper-tts-web/
+
+# Archived vendor files (large binaries)
+.archived/**/*.onnx
+.archived/**/*.tgz
+.archived/**/*.bin
+
+# Rust artifacts (everywhere)
+**/target/
+**/Cargo.lock
+**/*.rs.bk
+**/*.pdb
+
+# Piper build artifacts (submodule is tracked)
+vendor/piper/install/
+vendor/piper/build/
+vendor/piper/libpiper/build/
+
+# Keep directory structure
+!voices/.gitkeep
+!vendor/.gitkeep
+
+# Cloudflare
+.cloudflared/
+*.json
+!package.json
+!tsconfig.json
+!voices/*.onnx.json
+
+# Temporary files
+*.tmp
+*.temp
+.cache/
+
+# Testing
+coverage/
+.nyc_output/
+
+# Demo
+demo/node_modules/
+demo/dist/
+demo/.env
+!demo/.env.example
+
+# VAD model (downloaded)
+vendor/silero-vad/*.onnx
+
+# Docker artifacts
+*.tar
+*.tar.gz
+*.tgz
+*.zip
+docker-compose.override.yml
+
+# Package manager artifacts
+yarn.lock
+pnpm-lock.yaml
+package-lock.json  # Use bun.lockb instead
+
+# Build caches
+.cache/
+*.cache
+.turbo/
+.next/
+.nuxt/
+.output/
