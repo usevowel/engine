@@ -1,7 +1,7 @@
 {
   "name": "sndbrd",
   "version": "0.1.0",
-  "description": "OpenAI-compatible real-time voice API engine powered by Groq and Inworld TTS",
+  "description": "OpenAI-compatible real-time voice API server with modular providers",
   "type": "module",
   "private": true,
   "workspaces": [

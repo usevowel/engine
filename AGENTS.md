@@ -6,10 +6,10 @@
 
 **Tech Stack:**
 - **Runtime:** Node.js / Bun
-- **LLM:** Groq (500+ tokens/sec) **OR** OpenRouter (Claude, GPT-4, Llama, 100+ models)
-- **STT:** Modular (AssemblyAI, Groq Whisper)
-- **TTS:** Modular (Inworld)
-- **VAD:** Modular (Silero, integrated with STT providers)
+- **LLM:** Groq (500+ tokens/sec) OR OpenRouter (Claude, GPT-4, Llama, 100+ models)
+- **STT:** Modular provider system (Groq Whisper, etc.)
+- **TTS:** Modular provider system
+- **VAD:** Modular provider system (Silero)
 - **WebSocket:** Native WebSocket API
 - **AI SDK:** Vercel AI SDK (LLM integration)
 - **Auth:** jose (JWT tokens)
@@ -18,13 +18,12 @@
 - OpenAI Realtime API protocol compliance
 - Ephemeral token authentication (5-minute expiration)
 - Bidirectional audio streaming (PCM16, 24kHz, mono)
-- **Modular provider system** - swap STT/TTS/VAD/LLM via configuration
-- **OpenRouter LLM support** - use Claude, GPT-4, Llama, or 100+ other models
-- **Test mode** - disable billing/metering for development
+- Modular provider system - swap STT/TTS/VAD/LLM via configuration
+- OpenRouter LLM support - use Claude, GPT-4, Llama, or 100+ other models
 - Server-side Voice Activity Detection (VAD)
-- Tool/function calling support with **automatic repair** for malformed tool calls
-- **Subagent mode** - delegate tasks to specialized subagents
-- **Language switching** - dynamic language detection and switching
+- Tool/function calling support with automatic repair for malformed tool calls
+- Subagent mode - delegate tasks to specialized subagents
+- Language switching - dynamic language detection and switching
 - Conversation history management with summarization
 
 ---
@@ -38,9 +37,6 @@ bun install
 
 # Setup and validate environment
 bun run setup
-
-# Download voice models (optional)
-bun run download-voice -- en_US-ryan-medium
 
 # Download VAD model
 bun run download-vad
@@ -160,30 +156,28 @@ engine/
 
 **Speech-to-Text (STT):**
 - `groq-whisper` - Groq Whisper Large V3 (batch mode, high quality)
-- `assemblyai` - AssemblyAI (streaming, integrated VAD, advanced features)
 
 **Text-to-Speech (TTS):**
-- `inworld` - Inworld TTS (cloud, high quality)
+- Configurable via modular provider system
 
 **Voice Activity Detection (VAD):**
 - `silero` - Silero VAD (local, standalone)
-- `assemblyai-integrated` - Integrated with AssemblyAI
 - `none` - Disable VAD
 
 ### Configuration Examples
 
-**Default (Groq + Inworld + Silero):**
+**Default (Groq + Silero):**
 ```bash
+LLM_PROVIDER=groq
 STT_PROVIDER=groq-whisper
-TTS_PROVIDER=inworld
 VAD_PROVIDER=silero
 ```
 
-**AssemblyAI + Inworld:**
+**OpenRouter:**
 ```bash
-STT_PROVIDER=assemblyai
-TTS_PROVIDER=inworld
-VAD_PROVIDER=assemblyai-integrated
+LLM_PROVIDER=openrouter
+STT_PROVIDER=groq-whisper
+VAD_PROVIDER=silero
 ```
 
 ---
@@ -199,7 +193,7 @@ API_KEY="your-server-api-key"
 # JWT secret for ephemeral token generation (minimum 32 characters)
 JWT_SECRET="your-secure-random-string-min-32-chars"
 
-# LLM API key (required unless TEST_MODE=true)
+# LLM API key
 # Choose one based on LLM_PROVIDER:
 GROQ_API_KEY="gsk_..."              # If LLM_PROVIDER=groq (default)
 # OR
@@ -221,14 +215,6 @@ OPENROUTER_API_KEY="sk-or-v1-..."
 OPENROUTER_MODEL="anthropic/claude-3-5-sonnet"  # Default model
 ```
 
-### Test Mode Configuration
-
-```bash
-# Enable test mode to disable billing/metering
-# ⚠️  NEVER enable in production!
-TEST_MODE="false"  # Default: false
-```
-
 ### Optional Variables
 
 ```bash
@@ -237,7 +223,7 @@ PORT="3001"                              # Server port (default: 3001)
 NODE_ENV="development"                   # Environment (development/production)
 
 # Voice Configuration
-INWORLD_VOICE="Ashley"  # Default TTS voice
+DEFAULT_VOICE="Ashley"  # Default TTS voice
 
 # Voice Activity Detection (VAD)
 VAD_ENABLED="true"                       # Enable server-side VAD (default: true)
@@ -293,34 +279,24 @@ DEFAULT_PRESENCE_PENALTY="0.3"           # Presence penalty (0.0-2.0, reduces re
 
 **Session Handler (`src/session/handler.ts`)**
 - Main WebSocket message router
-- Handles all OpenAI Realtime API events:
-  - `session.update` - Update session configuration
-  - `input_audio_buffer.append` - Receive audio chunks
-  - `input_audio_buffer.commit` - Process accumulated audio
-  - `conversation.item.create` - Add messages to conversation
-  - `response.create` - Generate AI response
-  - `response.cancel` - Cancel in-progress response
+- Handles all OpenAI Realtime API events
 - Manages conversation history
 - Coordinates VAD, STT, LLM, and TTS services
 
 **LLM Service (`src/services/llm.ts`)**
 - Streams responses from Groq/OpenRouter
 - Uses Vercel AI SDK for streaming
-- Supports tool calling (tools defined by client, executed client-side)
-- Formats conversation history for LLM context
+- Supports tool calling
 
 **Agent Provider (`src/services/agent-provider.ts`)**
 - Vercel AI SDK Agent integration
 - Supports subagent mode for task delegation
-- Tool orchestration and execution
 
 **Transcription Service (`src/services/transcription.ts`)**
 - Converts audio to text via configured STT provider
 - Handles PCM16 audio format
-- Returns transcription with confidence scores
 
 **VAD (Voice Activity Detection)**
-- Integrated with STT providers (AssemblyAI)
 - Standalone Silero VAD support
 - Configurable threshold and silence duration
 
@@ -330,31 +306,31 @@ DEFAULT_PRESENCE_PENALTY="0.3"           # Presence penalty (0.0-2.0, reduces re
 
 ### TypeScript Guidelines
 
-- **Strict Mode:** All code uses TypeScript strict mode
-- **Module System:** ESNext modules (`import`/`export`)
-- **Target:** ESNext
-- **Type Safety:** Prefer explicit types over `any`
+- Strict Mode: All code uses TypeScript strict mode
+- Module System: ESNext modules (import/export)
+- Target: ESNext
+- Type Safety: Prefer explicit types over any
 
 ### Code Organization
 
-- **Comments:** All files have TSDoc header comments explaining purpose
-- **Exports:** Named exports preferred over default exports
-- **Error Handling:** Try-catch blocks with descriptive error messages
-- **Logging:** Structured console logs with emoji prefixes
+- Comments: All files have TSDoc header comments explaining purpose
+- Exports: Named exports preferred over default exports
+- Error Handling: Try-catch blocks with descriptive error messages
+- Logging: Structured console logs with emoji prefixes
 
 ### Naming Conventions
 
-- **Files:** kebab-case (`tts-onnx.ts`, `voice-agent.tsx`)
-- **Functions:** camelCase (`generateToken`, `handleMessage`)
-- **Types/Interfaces:** PascalCase (`SessionData`, `LLMStreamOptions`)
-- **Constants:** UPPER_SNAKE_CASE (`SUPPORTED_MODEL`, `DEFAULT_VOICE`)
+- Files: kebab-case (tts-onnx.ts, voice-agent.tsx)
+- Functions: camelCase (generateToken, handleMessage)
+- Types/Interfaces: PascalCase (SessionData, LLMStreamOptions)
+- Constants: UPPER_SNAKE_CASE (SUPPORTED_MODEL, DEFAULT_VOICE)
 
 ### Audio Format Standards
 
-- **Sample Rate:** 24,000 Hz (24kHz)
-- **Format:** PCM16 (16-bit signed little-endian)
-- **Channels:** Mono (1 channel)
-- **Encoding:** Base64 for transmission over WebSocket
+- Sample Rate: 24,000 Hz (24kHz)
+- Format: PCM16 (16-bit signed little-endian)
+- Channels: Mono (1 channel)
+- Encoding: Base64 for transmission over WebSocket
 
 ---
 
@@ -410,29 +386,23 @@ bun run dev
 
 3. **Token Transmission**
    - Supports multiple methods for compatibility:
-     - Authorization header: `Bearer ek_...`
-     - WebSocket subprotocol: `openai-insecure-api-key.ek_...`
-     - Query parameter: `?token=ek_...` (fallback only)
+     - Authorization header: Bearer ek_...
+     - WebSocket subprotocol: openai-insecure-api-key.ek_...
+     - Query parameter: ?token=ek_... (fallback only)
 
 ### Best Practices
 
-- ✅ Always use HTTPS/WSS in production
-- ✅ Validate all incoming messages
-- ✅ Implement rate limiting on token generation
-- ✅ Monitor usage and set quotas
-- ✅ Keep dependencies updated
-- ❌ Never commit `.env` files
-- ❌ Never expose `API_KEY` or `GROQ_API_KEY` to clients
+- Always use HTTPS/WSS in production
+- Validate all incoming messages
+- Implement rate limiting on token generation
+- Monitor usage and set quotas
+- Keep dependencies updated
+- Never commit .env files
+- Never expose API_KEY or GROQ_API_KEY to clients
 
 ---
 
 ## Common Tasks
-
-### Adding a New Voice
-
-```bash
-bun run download-voice -- en_US-ryan-medium
-```
 
 ### Modifying System Instructions
 
@@ -445,9 +415,9 @@ export const DEFAULT_SYSTEM_PROMPT = `...`;
 ### Adding Tool Support
 
 Tools are defined client-side using the OpenAI Agents SDK. Server-side:
-1. Server receives tool definitions in `session.update` event
+1. Server receives tool definitions in session.update event
 2. LLM can call tools during generation
-3. Tool calls are streamed to client as `response.function_call_arguments.*` events
+3. Tool calls are streamed to client as response.function_call_arguments.* events
 4. Client executes tools and sends results back
 5. Server continues conversation with tool results
 
@@ -457,7 +427,7 @@ See `demo/WEATHER-TOOL-EXAMPLE.md` for a complete example.
 
 1. Check server logs for connection attempts
 2. Verify token is valid and not expired
-3. Ensure WebSocket URL is correct: `wss://host/v1/realtime`
+3. Ensure WebSocket URL is correct: wss://host/v1/realtime
 4. Check browser console for client-side errors
 5. Use `test/connection-test.ts` to isolate server issues
 
@@ -465,12 +435,11 @@ See `demo/WEATHER-TOOL-EXAMPLE.md` for a complete example.
 
 ## Additional Resources
 
-- **OpenAI Realtime API Docs:** https://platform.openai.com/docs/guides/realtime-websocket
-- **OpenAI Agents JS SDK:** https://openai.github.io/openai-agents-js
-- **Moonshot Kimi K2 Instruct 0905:** https://platform.moonshot.cn/docs/intro
-- **Inworld AI:** https://www.inworld.ai
-- **Silero VAD:** https://github.com/snakers4/silero-vad
-- **Vercel AI SDK:** https://sdk.vercel.ai
+- OpenAI Realtime API Docs: https://platform.openai.com/docs/guides/realtime-websocket
+- OpenAI Agents JS SDK: https://openai.github.io/openai-agents-js
+- Groq: https://console.groq.com
+- OpenRouter: https://openrouter.ai
+- Vercel AI SDK: https://sdk.vercel.ai
 
 ---
 
@@ -499,5 +468,5 @@ wscat -c "ws://localhost:3001/v1/realtime?model=moonshotai/kimi-k2-instruct-0905
 
 ---
 
-**Last Updated:** March 23, 2026
-**Repository:** https://github.com/usevowel/engine
+Last Updated: March 23, 2026
+Repository: https://github.com/usevowel/engine
