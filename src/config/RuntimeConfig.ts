@@ -14,7 +14,7 @@
 export interface RuntimeProviderConfig {
   // STT Configuration
   stt: {
-    provider: 'groq-whisper' | 'fennec' | 'assemblyai' | 'mistral-voxtral-realtime';
+    provider: 'groq-whisper' | 'fennec' | 'assemblyai' | 'mistral-voxtral-realtime' | 'deepgram';
     groqWhisper?: {
       apiKey: string;
       model: string;
@@ -47,17 +47,29 @@ export interface RuntimeProviderConfig {
       sampleRate?: number;
       language?: string;
     };
+    deepgram?: {
+      apiKey: string;
+      model?: string;
+      language?: string;
+      sampleRate?: number;
+    };
   };
   
   // TTS Configuration
   tts: {
-    provider: 'inworld';
+    provider: 'inworld' | 'deepgram';
     inworld?: {
       apiKey: string;
       modelId?: string;
       voice?: string;
       sampleRate?: number;
       speakingRate?: number;
+    };
+    deepgram?: {
+      apiKey: string;
+      model?: string;
+      sampleRate?: number;
+      encoding?: string;
     };
   };
   
@@ -215,9 +227,15 @@ export function validateConfig(config: RuntimeConfig): void {
   if (sttProvider === 'mistral-voxtral-realtime' && !config.providers.stt.mistralVoxtralRealtime?.apiKey) {
     throw new Error('Mistral API key is required for mistral-voxtral-realtime provider');
   }
+  if (sttProvider === 'deepgram' && !config.providers.stt.deepgram?.apiKey) {
+    throw new Error('Deepgram API key is required for deepgram STT provider');
+  }
   
   const ttsProvider = config.providers.tts.provider;
   if (ttsProvider === 'inworld' && !config.providers.tts.inworld?.apiKey) {
     throw new Error('Inworld API key is required for inworld provider');
+  }
+  if (ttsProvider === 'deepgram' && !config.providers.tts.deepgram?.apiKey) {
+    throw new Error('Deepgram API key is required for deepgram TTS provider');
   }
 }

@@ -11,8 +11,8 @@ import { getEventSystem, EventCategory } from '../events';
 /**
  * Provider type enums
  */
-export const STTProviderType = z.enum(['groq-whisper', 'fennec', 'assemblyai', 'mistral-voxtral-realtime']);
-export const TTSProviderType = z.enum(['inworld']);
+export const STTProviderType = z.enum(['groq-whisper', 'fennec', 'assemblyai', 'mistral-voxtral-realtime', 'deepgram']);
+export const TTSProviderType = z.enum(['inworld', 'deepgram']);
 export const VADProviderType = z.enum(['silero', 'fennec-integrated', 'assemblyai-integrated', 'none']);
 
 export type STTProviderType = z.infer<typeof STTProviderType>;
@@ -24,8 +24,6 @@ export type VADProviderType = z.infer<typeof VADProviderType>;
  */
 const GroqWhisperConfig = z.object({
   apiKey: z.string().min(1, 'Groq API key is required'),
-  // Note: The GPT-OSS 120B model, while very fast, had a long reasoning step which added latency to our voice process. As such, we're switching to the moonshot model by default.
-  // model: z.string().default('openai/gpt-oss-120b'),
   model: z.string().default('moonshotai/kimi-k2-instruct-0905'),
   whisperModel: z.string().default('whisper-large-v3'),
 });
@@ -63,11 +61,25 @@ const MistralVoxtralRealtimeConfig = z.object({
   language: z.string().optional(),
 });
 
+const DeepgramSTTConfig = z.object({
+  apiKey: z.string().min(1, 'Deepgram API key is required'),
+  model: z.string().default('nova-3'),
+  language: z.string().default('en-US'),
+  sampleRate: z.number().default(16000),
+});
+
 const InworldTTSConfig = z.object({
   apiKey: z.string().min(1, 'Inworld API key is required'),
   modelId: z.string().default('inworld-tts-1.5-mini'),
   voiceId: z.string().default('Ashley'),
   sampleRate: z.number().default(48000),
+});
+
+const DeepgramTTSConfig = z.object({
+  apiKey: z.string().min(1, 'Deepgram API key is required'),
+  model: z.string().default('aura-2-thalia-en'),
+  sampleRate: z.number().default(24000),
+  encoding: z.string().default('linear16'),
 });
 
 const SileroVADConfig = z.object({
@@ -88,10 +100,12 @@ const ProviderConfigSchema = z.object({
     fennec: FennecSTTConfig.optional(),
     assemblyai: AssemblyAIConfig.optional(),
     mistralVoxtralRealtime: MistralVoxtralRealtimeConfig.optional(),
+    deepgram: DeepgramSTTConfig.optional(),
   }),
   tts: z.object({
     provider: TTSProviderType,
     inworld: InworldTTSConfig.optional(),
+    deepgram: DeepgramTTSConfig.optional(),
   }),
   vad: z.object({
     enabled: z.boolean(),
@@ -144,8 +158,6 @@ export function loadProviderConfig(): ProviderConfig {
       provider: sttProvider,
       groqWhisper: sttProvider === 'groq-whisper' ? {
         apiKey: env.GROQ_API_KEY || '',
-        // Note: The GPT-OSS 120B model, while very fast, had a long reasoning step which added latency to our voice process. As such, we're switching to the moonshot model by default.
-        // model: env.GROQ_MODEL || 'openai/gpt-oss-120b',
         model: env.GROQ_MODEL || 'moonshotai/kimi-k2-instruct-0905',
         whisperModel: env.GROQ_WHISPER_MODEL || 'whisper-large-v3',
       } : undefined,
@@ -179,6 +191,12 @@ export function loadProviderConfig(): ProviderConfig {
         sampleRate: parseInt(env.MISTRAL_VOXTRAL_SAMPLE_RATE || '16000', 10),
         language: env.MISTRAL_VOXTRAL_LANGUAGE,
       } : undefined,
+      deepgram: sttProvider === 'deepgram' ? {
+        apiKey: env.DEEPGRAM_API_KEY || '',
+        model: env.DEEPGRAM_STT_MODEL || 'nova-3',
+        language: env.DEEPGRAM_STT_LANGUAGE || 'en-US',
+        sampleRate: parseInt(env.DEEPGRAM_STT_SAMPLE_RATE || '16000', 10),
+      } : undefined,
     },
     tts: {
       provider: ttsProvider,
@@ -187,6 +205,12 @@ export function loadProviderConfig(): ProviderConfig {
         modelId: env.INWORLD_MODEL_ID || 'inworld-tts-1.5-mini',
         voiceId: env.INWORLD_VOICE_ID || 'Ashley',
         sampleRate: parseInt(env.INWORLD_SAMPLE_RATE || '48000', 10),
+      } : undefined,
+      deepgram: ttsProvider === 'deepgram' ? {
+        apiKey: env.DEEPGRAM_API_KEY || '',
+        model: env.DEEPGRAM_TTS_MODEL || 'aura-2-thalia-en',
+        sampleRate: parseInt(env.DEEPGRAM_TTS_SAMPLE_RATE || '24000', 10),
+        encoding: env.DEEPGRAM_TTS_ENCODING || 'linear16',
       } : undefined,
     },
     vad: {
@@ -207,7 +231,7 @@ export function loadProviderConfig(): ProviderConfig {
     return ProviderConfigSchema.parse(config);
   } catch (error) {
     if (error instanceof z.ZodError) {
-      getEventSystem().error(EventCategory.PROVIDER, '❌ Provider configuration validation failed:');
+      getEventSystem().error(EventCategory.PROVIDER, 'Provider configuration validation failed:');
       for (const issue of error.issues) {
         getEventSystem().error(EventCategory.PROVIDER, `   - ${issue.path.join('.')}: ${issue.message}`);
       }
@@ -227,29 +251,30 @@ export const providerConfig = (() => {
   if (typeof Bun === 'undefined') {
     return {
       stt: {
-        provider: 'assemblyai' as const,
-        assemblyai: {
-          apiKey: '', // Will be provided by Workers Env
-          sampleRate: 24000,
-          encoding: 'pcm_s16le',
+        provider: 'groq-whisper' as const,
+        groqWhisper: {
+          apiKey: '',
+          model: 'moonshotai/kimi-k2-instruct-0905',
+          whisperModel: 'whisper-large-v3',
         },
-        mistralVoxtralRealtime: undefined,
       },
       tts: {
-        provider: 'inworld' as const,
-        inworld: {
-          apiKey: '', // Will be provided by Workers Env
-          voice: 'Ashley',
+        provider: 'deepgram' as const,
+        deepgram: {
+          apiKey: '',
+          model: 'aura-2-thalia-en',
           sampleRate: 24000,
+          encoding: 'linear16',
         },
       },
       vad: {
-        provider: 'assemblyai-integrated' as const,
-        enabled: false,
+        provider: 'silero' as const,
+        enabled: true,
         silero: {
           threshold: 0.5,
           minSilenceDurationMs: 550,
           speechPadMs: 0,
+          sampleRate: 16000,
         },
       },
     } as ProviderConfig;
@@ -263,7 +288,7 @@ export const providerConfig = (() => {
  * Display provider configuration on startup
  */
 export function displayProviderConfig(): void {
-  getEventSystem().info(EventCategory.PROVIDER, '🔧 Provider Configuration:');
+  getEventSystem().info(EventCategory.PROVIDER, 'Provider Configuration:');
   getEventSystem().info(EventCategory.STT, `   STT: ${providerConfig.stt.provider}`);
   getEventSystem().info(EventCategory.TTS, `   TTS: ${providerConfig.tts.provider}`);
   getEventSystem().info(EventCategory.VAD, `   VAD: ${providerConfig.vad.provider} (${providerConfig.vad.enabled ? 'enabled' : 'disabled'})`);

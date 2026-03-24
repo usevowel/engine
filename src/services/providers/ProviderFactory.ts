@@ -15,6 +15,8 @@ import { getEventSystem, EventCategory } from '../../events';
 // Public/shared providers
 import { GroqWhisperSTT } from '../../../packages/provider-groq-whisper-stt/src';
 import { MistralVoxtralRealtimeSTT } from '../../../packages/provider-mistral-voxtral-realtime-stt/src';
+import { DeepgramSTT } from '../../../packages/provider-deepgram-stt/src';
+import { DeepgramTTS } from '../../../packages/provider-deepgram-tts/src';
 
 /**
  * Base Provider Factory
@@ -58,6 +60,19 @@ export class ProviderFactory {
           config.mistralVoxtralRealtime
         );
         
+      case 'deepgram':
+        if (!config.deepgram?.apiKey) {
+          throw new Error('Deepgram API key not configured');
+        }
+        return new DeepgramSTT(
+          config.deepgram.apiKey,
+          {
+            model: config.deepgram.model,
+            language: config.deepgram.language,
+            sampleRate: config.deepgram.sampleRate,
+          }
+        );
+        
       default:
         getEventSystem().warn(EventCategory.STT, `Unknown STT provider: ${config.provider}, using default (groq-whisper)`);
         return new GroqWhisperSTT();
@@ -74,6 +89,19 @@ export class ProviderFactory {
     switch (config.provider) {
       case 'inworld':
         throw new Error('Inworld TTS is hosted-only. Use the private engine-hosted runtime.');
+        
+      case 'deepgram':
+        if (!config.deepgram?.apiKey) {
+          throw new Error('Deepgram API key not configured');
+        }
+        return new DeepgramTTS(
+          config.deepgram.apiKey,
+          {
+            model: config.deepgram.model,
+            sampleRate: config.deepgram.sampleRate,
+            encoding: config.deepgram.encoding,
+          }
+        );
         
       default:
         throw new Error(`Unsupported public TTS provider: ${config.provider}`);

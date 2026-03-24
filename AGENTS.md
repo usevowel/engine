@@ -7,8 +7,8 @@
 **Tech Stack:**
 - **Runtime:** Node.js / Bun
 - **LLM:** Groq (500+ tokens/sec) OR OpenRouter (Claude, GPT-4, Llama, 100+ models)
-- **STT:** Modular provider system (Groq Whisper, etc.)
-- **TTS:** Modular provider system
+- **STT:** Modular provider system (Groq Whisper, Deepgram)
+- **TTS:** Modular provider system (Deepgram)
 - **VAD:** Modular provider system (Silero)
 - **WebSocket:** Native WebSocket API
 - **AI SDK:** Vercel AI SDK (LLM integration)
