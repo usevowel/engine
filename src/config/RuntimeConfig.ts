@@ -81,6 +81,8 @@ export interface RuntimeProviderConfig {
       threshold: number;
       minSilenceDurationMs: number;
       speechPadMs: number;
+      sampleRate?: number;
+      modelPath?: string;
     };
   };
 }

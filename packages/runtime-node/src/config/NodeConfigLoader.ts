@@ -35,14 +35,20 @@ export class NodeConfigLoader {
           : llmProvider === 'workers-ai'
             ? env.WORKERS_AI_MODEL || '@cf/zai-org/glm-4.7-flash'
           : env.GROQ_MODEL || 'openai/gpt-oss-20b';
-    const sttProvider = (env.STT_PROVIDER || 'assemblyai') as 'groq-whisper' | 'fennec' | 'assemblyai' | 'mistral-voxtral-realtime';
+    const sttProvider = (env.STT_PROVIDER || 'assemblyai') as
+      | 'groq-whisper'
+      | 'fennec'
+      | 'assemblyai'
+      | 'mistral-voxtral-realtime'
+      | 'deepgram';
+    const ttsProvider = (env.TTS_PROVIDER || 'inworld') as 'inworld' | 'deepgram';
     const vadProvider = (env.VAD_PROVIDER ||
       (sttProvider === 'assemblyai' ? 'assemblyai-integrated' : 'none')) as
       | 'silero'
       | 'fennec-integrated'
       | 'assemblyai-integrated'
       | 'none';
-    const ttsVoice = env.INWORLD_VOICE || 'Ashley';
+    const inworldVoice = env.INWORLD_VOICE || 'Ashley';
 
     return {
       apiKey: env.API_KEY || '',
@@ -94,16 +100,32 @@ export class NodeConfigLoader {
               : 16000,
             language: env.MISTRAL_VOXTRAL_LANGUAGE,
           },
+          deepgram: {
+            apiKey: env.DEEPGRAM_API_KEY || '',
+            model: env.DEEPGRAM_STT_MODEL || 'nova-3',
+            language: env.DEEPGRAM_STT_LANGUAGE || 'en-US',
+            sampleRate: env.DEEPGRAM_STT_SAMPLE_RATE
+              ? parseInt(env.DEEPGRAM_STT_SAMPLE_RATE, 10)
+              : 16000,
+          },
         },
         tts: {
-          provider: 'inworld',
+          provider: ttsProvider,
           inworld: {
             apiKey: env.INWORLD_API_KEY || '',
-            voice: ttsVoice,
+            voice: inworldVoice,
             sampleRate: 24000,
             speakingRate: env.INWORLD_SPEAKING_RATE
               ? parseFloat(env.INWORLD_SPEAKING_RATE)
               : 1.2,
+          },
+          deepgram: {
+            apiKey: env.DEEPGRAM_API_KEY || '',
+            model: env.DEEPGRAM_TTS_MODEL || 'aura-2-thalia-en',
+            sampleRate: env.DEEPGRAM_TTS_SAMPLE_RATE
+              ? parseInt(env.DEEPGRAM_TTS_SAMPLE_RATE, 10)
+              : 24000,
+            encoding: env.DEEPGRAM_TTS_ENCODING || 'linear16',
           },
         },
         vad: {
@@ -113,6 +135,8 @@ export class NodeConfigLoader {
             threshold: parseFloat(env.VAD_THRESHOLD || '0.5'),
             minSilenceDurationMs: parseInt(env.VAD_MIN_SILENCE_MS || '550', 10),
             speechPadMs: parseInt(env.VAD_SPEECH_PAD_MS || '0', 10),
+            sampleRate: 16000,
+            modelPath: env.SILERO_VAD_MODEL_PATH,
           },
         },
       },

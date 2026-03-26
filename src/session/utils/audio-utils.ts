@@ -167,6 +167,14 @@ export async function synthesizeTextWithProvider(
   // Strip markdown symbols before TTS synthesis to prevent TTS from speaking them
   // (e.g., asterisks are spoken as "asterisk" which disrupts the flow)
   const cleanedText = stripMarkdown(text);
+
+  if (!cleanedText || cleanedText.trim().length === 0) {
+    getEventSystem().debug(
+      EventCategory.TTS,
+      '⏭️ [TTS] Skipping synthesis for empty cleaned text'
+    );
+    return chunks;
+  }
   
   // Map voice name to provider-specific voice
   const mappedVoice = mapVoiceToProvider(voice, providers.tts.name);

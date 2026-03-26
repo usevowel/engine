@@ -33,6 +33,27 @@ presets:
     vad:
       provider: "assemblyai-integrated"
       enabled: false
+  deepgram-voice:
+    name: "Deepgram Voice"
+    description: "Full OSS voice stack using Deepgram for STT and TTS"
+    llm:
+      provider: "openrouter"
+      model: "x-ai/grok-4-fast"
+      tokensPerHourRate: 80000
+      costMultiplier: 1.0
+    stt:
+      provider: "deepgram"
+      model: "nova-3"
+      sampleRate: 16000
+      costPerHour: 0.0043
+    tts:
+      provider: "deepgram"
+      model: "aura-2-thalia-en"
+      sampleRate: 24000
+      costPerHour: 0.006
+    vad:
+      provider: "none"
+      enabled: false
 
 defaultPreset: "default"
 

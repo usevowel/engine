@@ -8,9 +8,10 @@
     "packages/*"
   ],
   "scripts": {
-    "dev": "echo 'Hosted Cloudflare runtime moved to engine-hosted. Use packages/runtime-node for self-hosted runtime work.' && exit 1",
+    "dev": "bun --no-env-file --env-file=.env --env-file=.dev.vars --watch packages/runtime-node/src/server.ts",
     "build": "bun run --filter './packages/runtime-node' build",
     "build:packages": "bun run build",
+    "start": "bun --no-env-file --env-file=.env --env-file=.dev.vars packages/runtime-node/src/server.ts",
     "setup": "bun run scripts/setup.ts",
     "download-voice": "bun run scripts/download-voice.ts",
     "download-vad": "./scripts/download-vad-model.sh",
