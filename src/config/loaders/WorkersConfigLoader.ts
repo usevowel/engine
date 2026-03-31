@@ -1,15 +1,16 @@
 /**
  * Cloudflare Workers Runtime Configuration Loader
  * 
- * Loads configuration from Workers Env binding
+ * Loads configuration from Workers Env binding.
+ * Uses ProviderRegistry for dynamic provider validation.
  */
 
 import { RuntimeConfig, ConfigLoader, DEFAULT_AUDIO_CONFIG, validateConfig } from '../RuntimeConfig';
-
 import { getEventSystem, EventCategory } from '../../events';
+import { ProviderRegistry } from '../../services/providers/ProviderRegistry';
+
 /**
  * Cloudflare Workers Env interface (simplified - actual Env defined in workers/)
- * This allows us to load config without depending on Workers types
  */
 export interface WorkersEnv {
   // Required
@@ -27,7 +28,7 @@ export interface WorkersEnv {
   LLM_PROVIDER?: string;
   GROQ_MODEL?: string;
   GROQ_WHISPER_MODEL?: string;
-  GROQ_REASONING_EFFORT?: string; // Reasoning effort for Groq models: 'none', 'low', 'medium', 'high'
+  GROQ_REASONING_EFFORT?: string;
   OPENROUTER_API_KEY?: string;
   OPENROUTER_MODEL?: string;
   OPENROUTER_SITE_URL?: string;
@@ -49,55 +50,26 @@ export interface WorkersEnv {
   MAX_TOOL_RETRIES?: string;
   USE_DUAL_SCHEMA?: string;
   
-  // Fennec
-  FENNEC_API_KEY?: string;
-  FENNEC_SAMPLE_RATE?: string;
-  FENNEC_CHANNELS?: string;
-  FENNEC_LANGUAGE?: string;
-  FENNEC_DETECT_THOUGHTS?: string;
-  FENNEC_END_THOUGHT_EAGERNESS?: string;
-  FENNEC_FORCE_COMPLETE_TIME?: string;
-  FENNEC_VAD_THRESHOLD?: string;
-  FENNEC_VAD_MIN_SILENCE_MS?: string;
-  FENNEC_VAD_SPEECH_PAD_MS?: string;
+  // Deepgram
+  DEEPGRAM_API_KEY?: string;
+  DEEPGRAM_STT_MODEL?: string;
+  DEEPGRAM_STT_LANGUAGE?: string;
+  DEEPGRAM_STT_SAMPLE_RATE?: string;
+  DEEPGRAM_TTS_MODEL?: string;
+  DEEPGRAM_TTS_SAMPLE_RATE?: string;
+  DEEPGRAM_TTS_ENCODING?: string;
   
-  // AssemblyAI
-  ASSEMBLYAI_API_KEY?: string;
-  ASSEMBLYAI_SAMPLE_RATE?: string;
-  ASSEMBLYAI_ENCODING?: string;
-  ASSEMBLYAI_WORD_BOOST?: string;
-  /** When "true", ignores any token/client VAD config (preset, silence duration, etc.) and uses env-configured preset */
-  ASSEMBLYAI_VAD_CONFIG_LOCKED?: string;
-
-  // Modulate
-  MODULATE_API_KEY?: string;
-  MODULATE_SAMPLE_RATE?: string;
-  MODULATE_NUM_CHANNELS?: string;
-  MODULATE_AUDIO_FORMAT?: string;
-  MODULATE_SPEAKER_DIARIZATION?: string;
-  MODULATE_EMOTION_SIGNAL?: string;
-  MODULATE_ACCENT_SIGNAL?: string;
-  MODULATE_PII_PHI_TAGGING?: string;
-  MODULATE_PARTIAL_RESULTS?: string;
-  MODULATE_BATCH_URL?: string;
-  MODULATE_STREAMING_URL?: string;
-
   // Mistral Voxtral Realtime
   MISTRAL_API_KEY?: string;
   MISTRAL_VOXTRAL_MODEL?: string;
   MISTRAL_VOXTRAL_SAMPLE_RATE?: string;
   MISTRAL_VOXTRAL_LANGUAGE?: string;
   
-  // Inworld
-  INWORLD_API_KEY?: string;
-  INWORLD_VOICE?: string;
-  INWORLD_SAMPLE_RATE?: string;
-  INWORLD_SPEAKING_RATE?: string;
-  
   // VAD
   VAD_THRESHOLD?: string;
   VAD_MIN_SILENCE_MS?: string;
   VAD_SPEECH_PAD_MS?: string;
+  SILERO_VAD_MODEL_PATH?: string;
   
   // Turn Detection
   TURN_DETECTION_ENABLED?: string;
@@ -128,7 +100,77 @@ export interface WorkersEnv {
   
   // Speech Mode Configuration
   DEFAULT_SPEECH_MODE?: string;
-  
+}
+
+/**
+ * Build STT config object from env for a given provider name.
+ * Only handles OSS providers — hosted providers are handled by
+ * engine-hosted's own config loader.
+ */
+function buildSTTConfigFromEnv(provider: string, env: WorkersEnv): unknown {
+  switch (provider) {
+    case 'groq-whisper':
+      return {
+        apiKey: env.GROQ_API_KEY || '',
+        model: env.GROQ_MODEL || 'moonshotai/kimi-k2-instruct-0905',
+        whisperModel: env.GROQ_WHISPER_MODEL || 'whisper-large-v3',
+      };
+    case 'mistral-voxtral-realtime':
+      return {
+        apiKey: env.MISTRAL_API_KEY || '',
+        model: env.MISTRAL_VOXTRAL_MODEL || 'voxtral-mini-transcribe-realtime-2602',
+        sampleRate: parseInt(env.MISTRAL_VOXTRAL_SAMPLE_RATE || '16000', 10),
+        language: env.MISTRAL_VOXTRAL_LANGUAGE,
+      };
+    case 'deepgram':
+      return {
+        apiKey: env.DEEPGRAM_API_KEY || '',
+        model: env.DEEPGRAM_STT_MODEL || 'nova-3',
+        language: env.DEEPGRAM_STT_LANGUAGE || 'en-US',
+        sampleRate: parseInt(env.DEEPGRAM_STT_SAMPLE_RATE || '16000', 10),
+      };
+    default:
+      // Unknown or hosted provider — return empty config;
+      // the hosted runtime will fill this in via its own loader.
+      return {};
+  }
+}
+
+/**
+ * Build TTS config object from env for a given provider name.
+ */
+function buildTTSConfigFromEnv(provider: string, env: WorkersEnv): unknown {
+  switch (provider) {
+    case 'deepgram':
+      return {
+        apiKey: env.DEEPGRAM_API_KEY || '',
+        model: env.DEEPGRAM_TTS_MODEL || 'aura-2-thalia-en',
+        sampleRate: parseInt(env.DEEPGRAM_TTS_SAMPLE_RATE || '24000', 10),
+        encoding: env.DEEPGRAM_TTS_ENCODING || 'linear16',
+      };
+    default:
+      return {};
+  }
+}
+
+/**
+ * Build VAD config object from env for a given provider name.
+ */
+function buildVADConfigFromEnv(provider: string, env: WorkersEnv): unknown {
+  switch (provider) {
+    case 'silero':
+      return {
+        threshold: parseFloat(env.VAD_THRESHOLD || '0.5'),
+        minSilenceDurationMs: parseInt(env.VAD_MIN_SILENCE_MS || '550', 10),
+        speechPadMs: parseInt(env.VAD_SPEECH_PAD_MS || '0', 10),
+        sampleRate: 16000,
+        modelPath: env.SILERO_VAD_MODEL_PATH,
+      };
+    case 'none':
+      return { enabled: false };
+    default:
+      return {};
+  }
 }
 
 /**
@@ -139,9 +181,20 @@ export class WorkersConfigLoader implements ConfigLoader {
   
   load(): RuntimeConfig {
     // Determine providers
-    const sttProvider = (this.env.STT_PROVIDER || 'assemblyai') as 'groq-whisper' | 'fennec' | 'assemblyai' | 'mistral-voxtral-realtime' | 'modulate';
-    const ttsProvider = (this.env.TTS_PROVIDER || 'inworld') as 'inworld';
+    const sttProvider = this.env.STT_PROVIDER || 'groq-whisper';
+    const ttsProvider = this.env.TTS_PROVIDER || 'deepgram';
     const vadProvider = this.determineVADProvider(sttProvider);
+    
+    // Validate providers exist in registry
+    if (!ProviderRegistry.getSTTProvider(sttProvider)) {
+      getEventSystem().warn(EventCategory.PROVIDER, `STT provider '${sttProvider}' not registered — it may be a hosted-only provider`);
+    }
+    if (!ProviderRegistry.getTTSProvider(ttsProvider)) {
+      getEventSystem().warn(EventCategory.PROVIDER, `TTS provider '${ttsProvider}' not registered — it may be a hosted-only provider`);
+    }
+    if (!ProviderRegistry.getVADProvider(vadProvider)) {
+      getEventSystem().warn(EventCategory.PROVIDER, `VAD provider '${vadProvider}' not registered — it may be a hosted-only provider`);
+    }
     
     // Determine LLM provider and API key
     const llmProvider = (this.env.LLM_PROVIDER || 'groq') as 'groq' | 'openrouter' | 'cerebras' | 'workers-ai';
@@ -152,7 +205,7 @@ export class WorkersConfigLoader implements ConfigLoader {
       const keyPreview = llmApiKey 
         ? `${llmApiKey.substring(0, 8)}...${llmApiKey.substring(llmApiKey.length - 4)}`
         : 'MISSING';
-      getEventSystem().info(EventCategory.LLM, `🔧 WorkersConfigLoader: LLM_PROVIDER=cerebras, CEREBRAS_API_KEY=${keyPreview}`);
+      getEventSystem().info(EventCategory.LLM, `WorkersConfigLoader: LLM_PROVIDER=cerebras, CEREBRAS_API_KEY=${keyPreview}`);
     } else if (llmProvider === 'openrouter') {
       llmApiKey = this.env.OPENROUTER_API_KEY || '';
     } else if (llmProvider === 'workers-ai') {
@@ -194,74 +247,20 @@ export class WorkersConfigLoader implements ConfigLoader {
         maxToolRetries: this.env.MAX_TOOL_RETRIES ? parseInt(this.env.MAX_TOOL_RETRIES, 10) : 3,
       },
       
-      // Provider Configuration
+      // Provider Configuration (generic shape)
       providers: {
         stt: {
           provider: sttProvider,
-          groqWhisper: sttProvider === 'groq-whisper' ? {
-            apiKey: this.env.GROQ_API_KEY,
-            model: this.env.GROQ_MODEL || 'moonshotai/kimi-k2-instruct-0905',
-            whisperModel: this.env.GROQ_WHISPER_MODEL || 'whisper-large-v3',
-          } : undefined,
-          fennec: sttProvider === 'fennec' ? {
-            apiKey: this.env.FENNEC_API_KEY || '',
-            sampleRate: parseInt(this.env.FENNEC_SAMPLE_RATE || '16000', 10),
-            channels: parseInt(this.env.FENNEC_CHANNELS || '1', 10),
-            detectThoughts: this.env.FENNEC_DETECT_THOUGHTS === 'true',
-            endThoughtEagerness: (this.env.FENNEC_END_THOUGHT_EAGERNESS || 'high') as any,
-            forceCompleteTime: parseFloat(this.env.FENNEC_FORCE_COMPLETE_TIME || '20'),
-            vad: {
-              threshold: parseFloat(this.env.FENNEC_VAD_THRESHOLD || '0.35'),
-              min_silence_ms: parseInt(this.env.FENNEC_VAD_MIN_SILENCE_MS || '50', 10),
-              speech_pad_ms: parseInt(this.env.FENNEC_VAD_SPEECH_PAD_MS || '350', 10),
-            },
-          } : undefined,
-          assemblyai: sttProvider === 'assemblyai' ? {
-            apiKey: this.env.ASSEMBLYAI_API_KEY || '',
-            sampleRate: parseInt(this.env.ASSEMBLYAI_SAMPLE_RATE || '24000', 10),
-            encoding: this.env.ASSEMBLYAI_ENCODING || 'pcm_s16le',
-            wordBoost: this.env.ASSEMBLYAI_WORD_BOOST ? this.env.ASSEMBLYAI_WORD_BOOST.split(',') : [],
-            vadConfigLocked: this.env.ASSEMBLYAI_VAD_CONFIG_LOCKED === 'true',
-          } : undefined,
-          modulate: sttProvider === 'modulate' ? {
-            apiKey: this.env.MODULATE_API_KEY || '',
-            sampleRate: parseInt(this.env.MODULATE_SAMPLE_RATE || '24000', 10),
-            numChannels: parseInt(this.env.MODULATE_NUM_CHANNELS || '1', 10),
-            audioFormat: this.env.MODULATE_AUDIO_FORMAT || 's16le',
-            speakerDiarization: this.env.MODULATE_SPEAKER_DIARIZATION === 'true',
-            emotionSignal: this.env.MODULATE_EMOTION_SIGNAL === 'true',
-            accentSignal: this.env.MODULATE_ACCENT_SIGNAL === 'true',
-            piiPhiTagging: this.env.MODULATE_PII_PHI_TAGGING === 'true',
-            partialResults: this.env.MODULATE_PARTIAL_RESULTS !== 'false',
-            batchUrl: this.env.MODULATE_BATCH_URL,
-            streamingUrl: this.env.MODULATE_STREAMING_URL,
-          } : undefined,
-          mistralVoxtralRealtime: sttProvider === 'mistral-voxtral-realtime' ? {
-            apiKey: this.env.MISTRAL_API_KEY || '',
-            model: this.env.MISTRAL_VOXTRAL_MODEL || 'voxtral-mini-transcribe-realtime-2602',
-            sampleRate: parseInt(this.env.MISTRAL_VOXTRAL_SAMPLE_RATE || '16000', 10),
-            language: this.env.MISTRAL_VOXTRAL_LANGUAGE,
-          } : undefined,
+          config: buildSTTConfigFromEnv(sttProvider, this.env),
         },
-        
         tts: {
           provider: ttsProvider,
-          inworld: ttsProvider === 'inworld' ? {
-            apiKey: this.env.INWORLD_API_KEY || '',
-            voice: this.env.INWORLD_VOICE || 'Ashley',
-            sampleRate: parseInt(this.env.INWORLD_SAMPLE_RATE || '24000', 10),
-            speakingRate: parseFloat(this.env.INWORLD_SPEAKING_RATE || '1.2'),
-          } : undefined,
+          config: buildTTSConfigFromEnv(ttsProvider, this.env),
         },
-        
         vad: {
           provider: vadProvider,
-          enabled: this.env.VAD_ENABLED !== 'false',
-          silero: vadProvider === 'silero' ? {
-            threshold: parseFloat(this.env.VAD_THRESHOLD || '0.5'),
-            minSilenceDurationMs: parseInt(this.env.VAD_MIN_SILENCE_MS || '550', 10),
-            speechPadMs: parseInt(this.env.VAD_SPEECH_PAD_MS || '0', 10),
-          } : undefined,
+          enabled: vadProvider !== 'none' && this.env.VAD_ENABLED !== 'false',
+          config: buildVADConfigFromEnv(vadProvider, this.env),
         },
       },
       
@@ -270,8 +269,8 @@ export class WorkersConfigLoader implements ConfigLoader {
       
       // Call Duration Limits
       callDuration: {
-        maxCallDurationMs: parseInt(this.env.MAX_CALL_DURATION_MS || '1800000', 10), // Default: 30 minutes
-        maxIdleDurationMs: parseInt(this.env.MAX_IDLE_DURATION_MS || '600000', 10),  // Default: 10 minutes
+        maxCallDurationMs: parseInt(this.env.MAX_CALL_DURATION_MS || '1800000', 10),
+        maxIdleDurationMs: parseInt(this.env.MAX_IDLE_DURATION_MS || '600000', 10),
       },
       
       // Audio Configuration
@@ -279,10 +278,10 @@ export class WorkersConfigLoader implements ConfigLoader {
       
       // Turn Detection Configuration
       turnDetection: {
-        enabled: this.env.TURN_DETECTION_ENABLED !== 'false', // Default enabled
+        enabled: this.env.TURN_DETECTION_ENABLED !== 'false',
         llmProvider: (this.env.TURN_DETECTION_LLM_PROVIDER || 'groq') as 'groq' | 'openrouter' | 'cerebras',
         llmModel: this.env.TURN_DETECTION_LLM_MODEL || 'llama-3.1-8b-instant',
-        llmApiKey: this.env.TURN_DETECTION_LLM_API_KEY, // Optional, falls back to GROQ_API_KEY, OPENROUTER_API_KEY, or CEREBRAS_API_KEY
+        llmApiKey: this.env.TURN_DETECTION_LLM_API_KEY,
         debounceMs: parseInt(this.env.TURN_DETECTION_DEBOUNCE_MS || '150', 10),
         timeoutMs: parseInt(this.env.TURN_DETECTION_TIMEOUT_MS || '3000', 10),
       },
@@ -292,9 +291,7 @@ export class WorkersConfigLoader implements ConfigLoader {
         defaultMode: (this.env.DEFAULT_SPEECH_MODE === 'explicit') ? 'explicit' : 'implicit' as 'implicit' | 'explicit',
       },
       
-      // Response Filter Configuration (AI-driven deduplication and translation)
-      // Enabled by default unless explicitly disabled
-      // Default model: GPT-OSS 20B (more reliable than smaller models)
+      // Response Filter Configuration
       responseFilter: this.env.RESPONSE_FILTER_ENABLED !== 'false' ? {
         enabled: true,
         targetLanguage: this.env.RESPONSE_FILTER_TARGET_LANGUAGE,
@@ -320,15 +317,14 @@ export class WorkersConfigLoader implements ConfigLoader {
     return config;
   }
   
-  private determineVADProvider(
-    sttProvider: string
-  ): 'silero' | 'fennec-integrated' | 'assemblyai-integrated' | 'none' {
+  private determineVADProvider(sttProvider: string): string {
     if (this.env.VAD_PROVIDER) {
-      return this.env.VAD_PROVIDER as any;
+      return this.env.VAD_PROVIDER;
     }
     if (this.env.VAD_ENABLED === 'false') {
       return 'none';
     }
+    // Integrated VAD providers are hosted-only; default to 'silero' for OSS
     if (sttProvider === 'fennec') {
       return 'fennec-integrated';
     }

@@ -8,9 +8,13 @@
  * This file only validates and exports config when running in Bun.
  */
 
-import { providerConfig, displayProviderConfig } from './providers';
+import { displayProviderConfig } from './providers';
 import { getEventSystem, EventCategory } from '../events';
-export { providerConfig };
+
+// Legacy re-export — the old providerConfig singleton was removed during the
+// registry refactor.  Nothing in the codebase reads `config.providerConfig`
+// anymore, so we export an empty placeholder to keep the module shape stable.
+export const providerConfig = {} as Record<string, never>;
 
 /**
  * Check if running in Bun environment

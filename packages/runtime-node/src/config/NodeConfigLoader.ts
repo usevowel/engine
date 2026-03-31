@@ -2,15 +2,84 @@
  * Node/Bun Configuration Loader
  *
  * Loads the runtime-agnostic configuration shape used by the shared
- * realtime session handlers so the Bun server follows the same protocol path
- * as the Workers runtime.
+ * realtime session handlers.
+ *
+ * Uses ProviderRegistry for dynamic provider validation.
  *
  * @module config
  */
 
 import type { RuntimeConfig } from '../../../../src/config/RuntimeConfig';
+import { ProviderRegistry } from '../../../../src/services/providers/ProviderRegistry';
 
 export interface NodeRuntimeConfig extends RuntimeConfig {}
+
+function buildSTTConfigFromEnv(provider: string): unknown {
+  const env = process.env;
+  switch (provider) {
+    case 'groq-whisper':
+      return {
+        apiKey: env.GROQ_API_KEY || '',
+        model: env.GROQ_MODEL || 'moonshotai/kimi-k2-instruct-0905',
+        whisperModel: env.GROQ_WHISPER_MODEL || 'whisper-large-v3',
+      };
+    case 'mistral-voxtral-realtime':
+      return {
+        apiKey: env.MISTRAL_API_KEY || '',
+        model: env.MISTRAL_VOXTRAL_MODEL || 'voxtral-mini-transcribe-realtime-2602',
+        sampleRate: env.MISTRAL_VOXTRAL_SAMPLE_RATE
+          ? parseInt(env.MISTRAL_VOXTRAL_SAMPLE_RATE, 10)
+          : 16000,
+        language: env.MISTRAL_VOXTRAL_LANGUAGE,
+      };
+    case 'deepgram':
+      return {
+        apiKey: env.DEEPGRAM_API_KEY || '',
+        model: env.DEEPGRAM_STT_MODEL || 'nova-3',
+        language: env.DEEPGRAM_STT_LANGUAGE || 'en-US',
+        sampleRate: env.DEEPGRAM_STT_SAMPLE_RATE
+          ? parseInt(env.DEEPGRAM_STT_SAMPLE_RATE, 10)
+          : 16000,
+      };
+    default:
+      return {};
+  }
+}
+
+function buildTTSConfigFromEnv(provider: string): unknown {
+  const env = process.env;
+  switch (provider) {
+    case 'deepgram':
+      return {
+        apiKey: env.DEEPGRAM_API_KEY || '',
+        model: env.DEEPGRAM_TTS_MODEL || 'aura-2-thalia-en',
+        sampleRate: env.DEEPGRAM_TTS_SAMPLE_RATE
+          ? parseInt(env.DEEPGRAM_TTS_SAMPLE_RATE, 10)
+          : 24000,
+        encoding: env.DEEPGRAM_TTS_ENCODING || 'linear16',
+      };
+    default:
+      return {};
+  }
+}
+
+function buildVADConfigFromEnv(provider: string): unknown {
+  const env = process.env;
+  switch (provider) {
+    case 'silero':
+      return {
+        threshold: parseFloat(env.VAD_THRESHOLD || '0.5'),
+        minSilenceDurationMs: parseInt(env.VAD_MIN_SILENCE_MS || '550', 10),
+        speechPadMs: parseInt(env.VAD_SPEECH_PAD_MS || '0', 10),
+        sampleRate: 16000,
+        modelPath: env.SILERO_VAD_MODEL_PATH,
+      };
+    case 'none':
+      return { enabled: false };
+    default:
+      return {};
+  }
+}
 
 /**
  * Configuration loader for Node/Bun runtime
@@ -35,20 +104,10 @@ export class NodeConfigLoader {
           : llmProvider === 'workers-ai'
             ? env.WORKERS_AI_MODEL || '@cf/zai-org/glm-4.7-flash'
           : env.GROQ_MODEL || 'openai/gpt-oss-20b';
-    const sttProvider = (env.STT_PROVIDER || 'assemblyai') as
-      | 'groq-whisper'
-      | 'fennec'
-      | 'assemblyai'
-      | 'mistral-voxtral-realtime'
-      | 'deepgram';
-    const ttsProvider = (env.TTS_PROVIDER || 'inworld') as 'inworld' | 'deepgram';
-    const vadProvider = (env.VAD_PROVIDER ||
-      (sttProvider === 'assemblyai' ? 'assemblyai-integrated' : 'none')) as
-      | 'silero'
-      | 'fennec-integrated'
-      | 'assemblyai-integrated'
-      | 'none';
-    const inworldVoice = env.INWORLD_VOICE || 'Ashley';
+
+    const sttProvider = env.STT_PROVIDER || 'groq-whisper';
+    const ttsProvider = env.TTS_PROVIDER || 'deepgram';
+    const vadProvider = env.VAD_PROVIDER || 'silero';
 
     return {
       apiKey: env.API_KEY || '',
@@ -77,67 +136,16 @@ export class NodeConfigLoader {
       providers: {
         stt: {
           provider: sttProvider,
-          groqWhisper: {
-            apiKey: env.GROQ_API_KEY || '',
-            model: env.GROQ_MODEL || 'openai/gpt-oss-20b',
-            whisperModel: env.GROQ_WHISPER_MODEL || 'whisper-large-v3',
-          },
-          fennec: {
-            apiKey: env.FENNEC_API_KEY || '',
-            sampleRate: 24000,
-            channels: 1,
-          },
-          assemblyai: {
-            apiKey: env.ASSEMBLYAI_API_KEY || '',
-            sampleRate: 24000,
-            encoding: 'pcm_s16le',
-          },
-          mistralVoxtralRealtime: {
-            apiKey: env.MISTRAL_API_KEY || '',
-            model: env.MISTRAL_VOXTRAL_MODEL || 'voxtral-mini-transcribe-realtime-2602',
-            sampleRate: env.MISTRAL_VOXTRAL_SAMPLE_RATE
-              ? parseInt(env.MISTRAL_VOXTRAL_SAMPLE_RATE, 10)
-              : 16000,
-            language: env.MISTRAL_VOXTRAL_LANGUAGE,
-          },
-          deepgram: {
-            apiKey: env.DEEPGRAM_API_KEY || '',
-            model: env.DEEPGRAM_STT_MODEL || 'nova-3',
-            language: env.DEEPGRAM_STT_LANGUAGE || 'en-US',
-            sampleRate: env.DEEPGRAM_STT_SAMPLE_RATE
-              ? parseInt(env.DEEPGRAM_STT_SAMPLE_RATE, 10)
-              : 16000,
-          },
+          config: buildSTTConfigFromEnv(sttProvider),
         },
         tts: {
           provider: ttsProvider,
-          inworld: {
-            apiKey: env.INWORLD_API_KEY || '',
-            voice: inworldVoice,
-            sampleRate: 24000,
-            speakingRate: env.INWORLD_SPEAKING_RATE
-              ? parseFloat(env.INWORLD_SPEAKING_RATE)
-              : 1.2,
-          },
-          deepgram: {
-            apiKey: env.DEEPGRAM_API_KEY || '',
-            model: env.DEEPGRAM_TTS_MODEL || 'aura-2-thalia-en',
-            sampleRate: env.DEEPGRAM_TTS_SAMPLE_RATE
-              ? parseInt(env.DEEPGRAM_TTS_SAMPLE_RATE, 10)
-              : 24000,
-            encoding: env.DEEPGRAM_TTS_ENCODING || 'linear16',
-          },
+          config: buildTTSConfigFromEnv(ttsProvider),
         },
         vad: {
           provider: vadProvider,
-          enabled: env.VAD_ENABLED !== 'false',
-          silero: {
-            threshold: parseFloat(env.VAD_THRESHOLD || '0.5'),
-            minSilenceDurationMs: parseInt(env.VAD_MIN_SILENCE_MS || '550', 10),
-            speechPadMs: parseInt(env.VAD_SPEECH_PAD_MS || '0', 10),
-            sampleRate: 16000,
-            modelPath: env.SILERO_VAD_MODEL_PATH,
-          },
+          enabled: env.VAD_ENABLED !== 'false' && vadProvider !== 'none',
+          config: buildVADConfigFromEnv(vadProvider),
         },
       },
 

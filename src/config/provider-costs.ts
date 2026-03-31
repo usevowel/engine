@@ -24,55 +24,21 @@ export interface STTCostConfig {
 }
 
 export const STT_COSTS: STTCostConfig[] = [
-  // AssemblyAI - Real-time streaming with VAD
-  // Source: https://www.assemblyai.com/pricing (streaming rate)
-  {
-    provider: 'assemblyai',
-    model: 'universal-streaming-english',
-    costPerMinute: 0.60,  // $0.60/min = $0.01/second
-    unit: 'minute',
-    notes: 'Real-time streaming with integrated VAD',
-  },
-  {
-    provider: 'assemblyai',
-    model: 'universal-streaming-multilingual',
-    costPerMinute: 0.75,
-    unit: 'minute',
-    notes: 'Multilingual streaming model',
-  },
-
   // Groq Whisper - Batch transcription
   // Source: https://console.groq.com/docs/asr (Whisper Large V3)
   {
     provider: 'groq-whisper',
     model: 'whisper-large-v3',
-    costPerMinute: 0.18,  // $0.18/min for Whisper on Groq
+    costPerMinute: 0.18,
     unit: 'minute',
     notes: 'Batch mode - high quality, fast turnaround',
   },
   {
     provider: 'groq-whisper',
     model: 'whisper-large-v3-turbo',
-    costPerMinute: 0.08,  // $0.08/min for Turbo
+    costPerMinute: 0.08,
     unit: 'minute',
     notes: 'Faster, slightly less accurate',
-  },
-
-  // Fennec ASR - Streaming with integrated VAD
-  // Source: Provider pricing (contact for rates)
-  {
-    provider: 'fennec',
-    model: 'default',
-    costPerMinute: 0.30,  // Estimated mid-tier pricing
-    unit: 'minute',
-    notes: 'Streaming with integrated VAD',
-  },
-  {
-    provider: 'modulate',
-    model: 'velma-2-stt-streaming',
-    costPerMinute: 0.001,
-    unit: 'minute',
-    notes: 'Velma-2 streaming STT ($0.06/hour) with partial and final utterances',
   },
 ];
 
@@ -90,49 +56,13 @@ export interface TTSCostConfig {
 }
 
 export const TTS_COSTS: TTSCostConfig[] = [
-  // Inworld TTS - High-quality cloud TTS
-  // Source: Inworld pricing (contact for current rates)
+  // Deepgram TTS - Cloud TTS
   {
-    provider: 'inworld',
-    voice: 'Ashley',  // Default voice
-    costPerCharacter: 0.00003,  // $0.03 per 1K chars = $0.00003/char
-    costPerMinute: 0.15,        // ~500 chars/min at 1.2x speed
+    provider: 'deepgram',
+    costPerCharacter: 0.00005,
+    costPerMinute: 0.05,
     unit: 'character',
-    notes: 'Premium voice, low latency',
-  },
-  {
-    provider: 'inworld',
-    voice: 'Ronald',
-    costPerCharacter: 0.00003,
-    costPerMinute: 0.15,
-    unit: 'character',
-    notes: 'Male voice',
-  },
-  {
-    provider: 'inworld',
-    voice: 'Dennis',
-    costPerCharacter: 0.00003,
-    costPerMinute: 0.15,
-    unit: 'character',
-    notes: 'Male voice',
-  },
-  {
-    provider: 'inworld',
-    voice: 'premium',  // Premium voices (Zeus, Hades, etc.)
-    costPerCharacter: 0.00005,  // $0.05 per 1K chars
-    costPerMinute: 0.25,
-    unit: 'character',
-    notes: 'Premium character voices',
-  },
-
-  // Piper - Local TTS (no API costs)
-  // Source: Open-source, runs locally
-  {
-    provider: 'piper',
-    voice: 'en_US-ryan-medium',
-    costPerCharacter: 0,  // Free - runs locally
-    unit: 'character',
-    notes: 'Local inference - no API costs',
+    notes: 'Aura-2 models, low latency',
   },
 ];
 
@@ -463,7 +393,7 @@ export function getLLMCost(provider: string, model: string): LLMCostConfig | und
 // =============================================================================
 
 export const DEFAULT_STT_PROVIDER = 'groq-whisper';
-export const DEFAULT_TTS_PROVIDER = 'inworld';
-export const DEFAULT_TTS_VOICE = 'Ashley';
+export const DEFAULT_TTS_PROVIDER = 'deepgram';
+export const DEFAULT_TTS_VOICE = 'Aura-2-Thalia-en';
 export const DEFAULT_LLM_PROVIDER = 'groq';
-export const DEFAULT_LLM_MODEL = 'llama-3.3-70b-versatile';
+export const DEFAULT_LLM_MODEL = 'moonshotai/kimi-k2-instruct-0905';

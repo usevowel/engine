@@ -99,9 +99,11 @@ async function handleTokenRequest(req: IncomingMessage, res: ServerResponse): Pr
     }
 
     const body = await readJsonBody(req);
+    const ttsConfig = runtimeConfig.providers.tts.config as Record<string, unknown> | undefined;
+    const defaultVoice = (ttsConfig?.voice as string) || 'Ashley';
     const token = await generateEphemeralToken({
       model: (body.model as string) || runtimeConfig.llm.model,
-      voice: (body.voice as string) || runtimeConfig.providers.tts.inworld?.voice || 'Ashley',
+      voice: (body.voice as string) || defaultVoice,
       ...body,
     });
 
@@ -205,8 +207,9 @@ async function createSessionData(req: IncomingMessage): Promise<SessionData> {
     generateSessionId();
   const model = typeof payload.model === 'string' ? payload.model : runtimeConfig.llm.model;
 
+  const ttsConfig = runtimeConfig.providers.tts.config as Record<string, unknown> | undefined;
   const envLike = {
-    INWORLD_VOICE: runtimeConfig.providers.tts.inworld?.voice,
+    INWORLD_VOICE: ttsConfig?.voice,
     STT_PROVIDER: runtimeConfig.providers.stt.provider,
     VAD_PROVIDER: runtimeConfig.providers.vad.provider,
     VAD_ENABLED: String(runtimeConfig.providers.vad.enabled),

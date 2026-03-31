@@ -4,99 +4,30 @@
  * This module defines the configuration structure needed by the application,
  * independent of any specific runtime (Cloudflare Workers, etc.)
  * 
- * Runtime-specific loaders (WorkersConfigLoader) will
- * implement loading logic for their respective environments.
+ * Provider configuration uses a generic shape — specific provider types
+ * are validated at runtime by the ProviderRegistry.
  */
 
 /**
- * Provider configuration structure
+ * Generic provider configuration.
+ * 
+ * The `provider` field is a string name validated against ProviderRegistry.
+ * The `config` field holds provider-specific options validated against the
+ * registered Zod schema for that provider.
  */
 export interface RuntimeProviderConfig {
-  // STT Configuration
   stt: {
-    provider: 'groq-whisper' | 'fennec' | 'assemblyai' | 'mistral-voxtral-realtime' | 'deepgram' | 'modulate';
-    groqWhisper?: {
-      apiKey: string;
-      model: string;
-      whisperModel: string;
-    };
-    fennec?: {
-      apiKey: string;
-      sampleRate?: number;
-      channels?: number;
-      detectThoughts?: boolean;
-      endThoughtEagerness?: 'high' | 'medium' | 'low';
-      forceCompleteTime?: number;
-      vad?: {
-        threshold?: number;
-        min_silence_ms?: number;
-        speech_pad_ms?: number;
-      };
-    };
-    assemblyai?: {
-      apiKey: string;
-      sampleRate?: number;
-      encoding?: string;
-      wordBoost?: string[];
-      /** When true, ignores token/client VAD config and uses env-configured preset */
-      vadConfigLocked?: boolean;
-    };
-    modulate?: {
-      apiKey: string;
-      sampleRate?: number;
-      numChannels?: number;
-      audioFormat?: string;
-      speakerDiarization?: boolean;
-      emotionSignal?: boolean;
-      accentSignal?: boolean;
-      piiPhiTagging?: boolean;
-      partialResults?: boolean;
-      batchUrl?: string;
-      streamingUrl?: string;
-    };
-    mistralVoxtralRealtime?: {
-      apiKey: string;
-      model?: string;
-      sampleRate?: number;
-      language?: string;
-    };
-    deepgram?: {
-      apiKey: string;
-      model?: string;
-      language?: string;
-      sampleRate?: number;
-    };
+    provider: string;
+    config: unknown;
   };
-  
-  // TTS Configuration
   tts: {
-    provider: 'inworld' | 'deepgram';
-    inworld?: {
-      apiKey: string;
-      modelId?: string;
-      voice?: string;
-      sampleRate?: number;
-      speakingRate?: number;
-    };
-    deepgram?: {
-      apiKey: string;
-      model?: string;
-      sampleRate?: number;
-      encoding?: string;
-    };
+    provider: string;
+    config: unknown;
   };
-  
-  // VAD Configuration
   vad: {
-    provider: 'silero' | 'fennec-integrated' | 'assemblyai-integrated' | 'none';
+    provider: string;
     enabled: boolean;
-    silero?: {
-      threshold: number;
-      minSilenceDurationMs: number;
-      speechPadMs: number;
-      sampleRate?: number;
-      modelPath?: string;
-    };
+    config?: unknown;
   };
 }
 
@@ -113,9 +44,9 @@ export interface RuntimeConfig {
     provider: 'groq' | 'openrouter' | 'cerebras' | 'workers-ai';
     apiKey: string;
     model: string;
-    openrouterSiteUrl?: string; // Optional site URL for OpenRouter
-    openrouterAppName?: string; // Optional app name for OpenRouter
-    openrouterProvider?: string; // Optional OpenRouter provider selection (e.g., "anthropic", "openai", "google")
+    openrouterSiteUrl?: string;
+    openrouterAppName?: string;
+    openrouterProvider?: string;
   };
   
   // Test Mode (disables external metering integrations)
@@ -126,9 +57,9 @@ export interface RuntimeConfig {
     useModularAgents: boolean;
     defaultType: 'vercel-sdk' | 'custom';
     maxSteps?: number;
-    disableStreaming?: boolean; // Disable streaming and wait for complete response
-    maxStreamRetries?: number; // Maximum number of stream restarts after hard errors (default: 3)
-    maxToolRetries?: number; // Maximum number of retries for tool call validation errors (default: 3)
+    disableStreaming?: boolean;
+    maxStreamRetries?: number;
+    maxToolRetries?: number;
   };
   
   // Provider Configuration
@@ -158,7 +89,7 @@ export interface RuntimeConfig {
     enabled: boolean;
     llmProvider: 'groq' | 'openrouter' | 'cerebras';
     llmModel: string;
-    llmApiKey?: string; // Optional, falls back to GROQ_API_KEY, OPENROUTER_API_KEY, or CEREBRAS_API_KEY
+    llmApiKey?: string;
     debounceMs: number;
     timeoutMs: number;
   };
@@ -171,26 +102,25 @@ export interface RuntimeConfig {
   // Response Filter Configuration (AI-driven deduplication and translation)
   responseFilter?: {
     enabled: boolean;
-    targetLanguage?: string; // ISO 639-1 code (e.g., 'en', 'es', 'fr')
-    filterModel?: string; // Filter LLM model (default: 'openai/gpt-oss-20b')
-    bufferSize?: number; // Buffer size in characters (default: 200)
-    maxRecentChunks?: number; // Maximum recent chunks for comparison (default: 10)
-    mode?: 'deduplication' | 'translation' | 'both'; // Filtering mode (default: 'deduplication')
+    targetLanguage?: string;
+    filterModel?: string;
+    bufferSize?: number;
+    maxRecentChunks?: number;
+    mode?: 'deduplication' | 'translation' | 'both';
   };
   
   // Subagent Configuration
   subagent?: {
     enabled: boolean;
-    model?: string; // Optional: different model for subagent
-    provider?: 'groq' | 'openrouter' | 'cerebras' | 'workers-ai'; // Optional: different provider
-    temperature?: number; // Optional: lower temp for tool calling (default: 0.3)
-    maxTokens?: number; // Optional: limit subagent response length (default: 2000)
+    model?: string;
+    provider?: 'groq' | 'openrouter' | 'cerebras' | 'workers-ai';
+    temperature?: number;
+    maxTokens?: number;
   };
 }
 
 /**
  * Configuration loader interface
- * Runtime-specific implementations will load config from their respective sources
  */
 export interface ConfigLoader {
   load(): RuntimeConfig | Promise<RuntimeConfig>;
@@ -206,7 +136,10 @@ export const DEFAULT_AUDIO_CONFIG = {
 };
 
 /**
- * Helper to validate required config fields
+ * Helper to validate required config fields.
+ * 
+ * Provider existence is validated by config loaders against ProviderRegistry.
+ * This function only checks structural requirements.
  */
 export function validateConfig(config: RuntimeConfig): void {
   if (!config.apiKey) {
@@ -222,38 +155,6 @@ export function validateConfig(config: RuntimeConfig): void {
     throw new Error('LLM API key is required (or enable test mode)');
   }
   
-  // Validate provider-specific keys
-  // Note: AssemblyAI validation is deferred if API key is missing, as it may not be needed
-  // for client-side VAD mode (which uses Groq Whisper batch mode instead)
-  const sttProvider = config.providers.stt.provider;
-  if (sttProvider === 'groq-whisper' && !config.providers.stt.groqWhisper?.apiKey) {
-    throw new Error('Groq API key is required for groq-whisper provider');
-  }
-  if (sttProvider === 'fennec' && !config.providers.stt.fennec?.apiKey) {
-    throw new Error('Fennec API key is required for fennec provider');
-  }
-  // AssemblyAI validation is conditional - only validate if API key is present
-  // If missing, it may be because client-side VAD will use Groq Whisper instead
-  // Validation will be checked later when provider is actually used
-  if (sttProvider === 'assemblyai' && !config.providers.stt.assemblyai?.apiKey) {
-    // Don't throw error here - allow client-side VAD mode to work without AssemblyAI API key
-    // The provider will be switched to groq-whisper in fetch() if client-side VAD is detected
-  }
-  if (sttProvider === 'mistral-voxtral-realtime' && !config.providers.stt.mistralVoxtralRealtime?.apiKey) {
-    throw new Error('Mistral API key is required for mistral-voxtral-realtime provider');
-  }
-  if (sttProvider === 'deepgram' && !config.providers.stt.deepgram?.apiKey) {
-    throw new Error('Deepgram API key is required for deepgram STT provider');
-  }
-  if (sttProvider === 'modulate' && !config.providers.stt.modulate?.apiKey) {
-    throw new Error('Modulate API key is required for modulate STT provider');
-  }
-  
-  const ttsProvider = config.providers.tts.provider;
-  if (ttsProvider === 'inworld' && !config.providers.tts.inworld?.apiKey) {
-    throw new Error('Inworld API key is required for inworld provider');
-  }
-  if (ttsProvider === 'deepgram' && !config.providers.tts.deepgram?.apiKey) {
-    throw new Error('Deepgram API key is required for deepgram TTS provider');
-  }
+  // Provider-specific validation (API keys, etc.) is handled by
+  // ProviderFactory at creation time using registered Zod schemas.
 }
