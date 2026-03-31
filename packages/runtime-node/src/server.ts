@@ -22,7 +22,7 @@ import { SessionManager } from '../../../src/session/SessionManager';
 import { generateEventId, generateSessionId } from '../../../src/lib/protocol';
 import { buildSessionConfig } from '../../../src/session/bootstrap';
 import { isAudioChunkMessage } from '../../../src/session/message-utils';
-import { ProviderFactory as NodeProviderFactory } from '../../../src/services/providers/ProviderFactoryNode';
+import { ProviderFactory } from '../../../src/services/providers/ProviderFactory';
 
 type RuntimeWebSocket = WebSocket & {
   data: SessionData;
@@ -32,7 +32,7 @@ type RuntimeWebSocket = WebSocket & {
 const configLoader = new NodeConfigLoader();
 const runtimeConfig: NodeRuntimeConfig = configLoader.load();
 const serverConfig = runtimeConfig.server ?? { port: 3001, env: 'development' };
-SessionManager.setProviderFactory(NodeProviderFactory);
+SessionManager.setProviderFactory(ProviderFactory);
 const eventSystem = getEventSystem();
 
 console.log('🚀 Starting Vowel Runtime (Node/Bun)');
@@ -209,7 +209,7 @@ async function createSessionData(req: IncomingMessage): Promise<SessionData> {
 
   const ttsConfig = runtimeConfig.providers.tts.config as Record<string, unknown> | undefined;
   const envLike = {
-    INWORLD_VOICE: ttsConfig?.voice,
+    DEFAULT_VOICE: ttsConfig?.voice,
     STT_PROVIDER: runtimeConfig.providers.stt.provider,
     VAD_PROVIDER: runtimeConfig.providers.vad.provider,
     VAD_ENABLED: String(runtimeConfig.providers.vad.enabled),

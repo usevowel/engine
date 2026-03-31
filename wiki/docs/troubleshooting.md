@@ -227,16 +227,15 @@ document.addEventListener('click', ensureAudioContext);
 
 ### TTS voice not available
 
-**Cause:** Specified voice doesn't exist.
+**Cause:** Specified Deepgram voice doesn't exist.
 
 **Solutions:**
 ```bash
-# Check available voices (if provider supports)
-curl https://inworld.ai/api/voices \
-  -H "Authorization: Bearer $INWORLD_API_KEY"
+# Use a supported Deepgram voice
+DEEPGRAM_TTS_MODEL=aura-2-thalia-en
 
-# Use default voice
-INWORLD_VOICE=Ashley  # Default available voice
+# Or fall back to the default voice
+DEFAULT_VOICE=Ashley
 ```
 
 ## Performance Issues

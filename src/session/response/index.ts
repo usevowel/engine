@@ -81,7 +81,9 @@ export async function generateResponse(ws: ServerWebSocket<SessionData>, options
   // Filter LLM uses Groq (GPT-OSS 20B), so we need Groq API key
   const groqApiKey = data.runtimeConfig?.llm.provider === 'groq' 
     ? data.runtimeConfig.llm.apiKey 
-    : data.runtimeConfig?.providers?.stt?.groqWhisper?.apiKey; // Fallback to STT Groq key if available
+    : (data.runtimeConfig?.providers?.stt?.provider === 'groq-whisper'
+      ? (data.runtimeConfig.providers.stt.config as Record<string, unknown>)?.apiKey as string | undefined
+      : undefined); // Fallback to STT Groq key if available
   
   // Response filter (post-filter) - enabled by default
   // Uses algorithmic pre-filtering + LLM deduplication for duplicate detection

@@ -11,7 +11,6 @@
         "@aws-sdk/client-s3": "^3.987.0",
         "@openrouter/ai-sdk-provider": "1.2.2",
         "ai": "^5.0.93",
-        "assemblyai": "^4.22.1",
         "franc": "^6.2.0",
         "fuzzball": "^2.2.3",
         "jose": "^5.2.0",
@@ -560,8 +559,6 @@
     "any-promise": ["any-promise@1.3.0", "", {}, "sha512-7UvmKalWRt1wgjL1RrGxoSJW/0QZFIegpeGvZG9kjp8vrRu55XTHbwnqq2GpXm9uLbcuhxm3IqX9OB4MZR1b2A=="],
 
     "argparse": ["argparse@2.0.1", "", {}, "sha512-8+9WqebbFzpX9OR+Wa6O29asIogeRMzcGtAINdpMHHyAg10f05aSFVBbcEqGf/PXw1EjAZ+q2/bEBg3DvurK3Q=="],
-
-    "assemblyai": ["assemblyai@4.22.1", "", { "dependencies": { "ws": "^8.18.0" } }, "sha512-7IZuOxwxTWs3U+JjH8aBxhA6RM3tOFjEDKgxhvnNpHLjVIKEaxl4hqFd+g0eSNtz7QnHUZJQffaz7JCariC0MQ=="],
 
     "assertion-error": ["assertion-error@1.1.0", "", {}, "sha512-jgsaNduz+ndvGyFt3uSuWqvy4lCnIJiovtouQN5JZHOKCS2QuhEdbcQHFhVksz2N2U9hXJo8odG7ETyWlEeuDw=="],
 

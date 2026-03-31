@@ -11,35 +11,12 @@ import { GroqWhisperSTT } from '../../../packages/provider-groq-whisper-stt/src'
 import { MistralVoxtralRealtimeSTT } from '../../../packages/provider-mistral-voxtral-realtime-stt/src';
 import { DeepgramSTT } from '../../../packages/provider-deepgram-stt/src';
 import { DeepgramTTS } from '../../../packages/provider-deepgram-tts/src';
-
-// ── Config schemas ──────────────────────────────────────────────────────────
-
-const GroqWhisperConfig = z.object({
-  apiKey: z.string().min(1, 'Groq API key is required'),
-  model: z.string().default('moonshotai/kimi-k2-instruct-0905'),
-  whisperModel: z.string().default('whisper-large-v3'),
-});
-
-const MistralVoxtralRealtimeConfig = z.object({
-  apiKey: z.string().min(1, 'Mistral API key is required'),
-  model: z.string().default('voxtral-mini-transcribe-realtime-2602'),
-  sampleRate: z.number().default(16000),
-  language: z.string().optional(),
-});
-
-const DeepgramSTTConfig = z.object({
-  apiKey: z.string().min(1, 'Deepgram API key is required'),
-  model: z.string().default('nova-3'),
-  language: z.string().default('en-US'),
-  sampleRate: z.number().default(16000),
-});
-
-const DeepgramTTSConfig = z.object({
-  apiKey: z.string().min(1, 'Deepgram API key is required'),
-  model: z.string().default('aura-2-thalia-en'),
-  sampleRate: z.number().default(24000),
-  encoding: z.string().default('linear16'),
-});
+import {
+  GroqWhisperConfig,
+  MistralVoxtralRealtimeConfig,
+  DeepgramSTTConfig,
+  DeepgramTTSConfig,
+} from '../../config/providers';
 
 // ── Registration ────────────────────────────────────────────────────────────
 
@@ -61,6 +38,11 @@ export function registerOSSProviders(): void {
       supportsGPU: false,
     },
     configSchema: GroqWhisperConfig,
+    costConfig: {
+      costPerMinute: 0.18,
+      unit: 'minute',
+      notes: 'Whisper Large V3 on Groq',
+    },
     factory: (config) => {
       return new GroqWhisperSTT(config.apiKey, {
         model: config.model,
@@ -120,6 +102,12 @@ export function registerOSSProviders(): void {
       supportsGPU: false,
     },
     configSchema: DeepgramTTSConfig,
+    costConfig: {
+      costPerCharacter: 0.00005,
+      costPerMinute: 0.05,
+      unit: 'character',
+      notes: 'Aura-2 models, low latency',
+    },
     factory: (config) => {
       return new DeepgramTTS(config.apiKey, {
         model: config.model,

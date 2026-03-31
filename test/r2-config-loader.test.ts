@@ -108,10 +108,10 @@ describe('R2ConfigLoader', () => {
       expect(presets.prime).toBeDefined();
       expect(presets.prime.llm.provider).toBe('groq');
       expect(presets.prime.llm.model).toBe('openai/gpt-oss-120b');
-      expect(presets.prime.stt.provider).toBe('assemblyai');
-      expect(presets.prime.tts.provider).toBe('inworld');
-      expect(presets.prime.tts.voice).toBe('Alex');
-      expect(presets.prime.vad.provider).toBe('assemblyai-integrated');
+      expect(presets.prime.stt.provider).toBe('deepgram');
+      expect(presets.prime.tts.provider).toBe('deepgram');
+      expect(presets.prime.tts.voice).toBeUndefined();
+      expect(presets.prime.vad.provider).toBe('silero');
       expect(presets.prime.vad.enabled).toBe(true);
     });
   });

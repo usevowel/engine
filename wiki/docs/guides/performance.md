@@ -92,11 +92,11 @@ const streamConfig = {
 ### Choose Fast Voices
 
 ```bash
-# Medium voices offer best quality/speed balance
-INWORLD_VOICE=Ryan-medium  # Good balance
+# Deepgram voices balance quality and latency well
+DEEPGRAM_TTS_MODEL=aura-2-thalia-en  # Good balance
 
-# For lowest latency, use lighter models
-INWORLD_VOICE=Ashley-fast   # Experimental, fastest
+# For lowest latency, choose a lighter voice preset
+DEEPGRAM_TTS_MODEL=aura-2-orion-en    # Experimental, fast
 ```
 
 ### Concurrent Audio Playback
@@ -158,20 +158,15 @@ WebSocket provides:
 - **Bidirectional** - Server can push data
 - **Low overhead** - Small frames, minimal headers
 
-### Enable Edge Deployment
+### Use Local Bun Deployment
 
-Deploy to Cloudflare Workers for:
-
-- **Global distribution** - 300+ locations worldwide
-- **Automatic routing** - Users connect to nearest edge
-- **Cold starts eliminated** - Always warm at edge
+For local development and profiling, run the engine directly with Bun:
 
 ```bash
-# Deploy to Workers
-bun run deploy:production
+bun run dev
 
-# Verify edge deployment
-curl -H "cf-ray: see" https://api.example.com/v1/health
+# Verify the local server
+curl http://localhost:8787/v1/health
 ```
 
 ### Compression

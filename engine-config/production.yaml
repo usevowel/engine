@@ -1,44 +1,44 @@
-# Engine Configuration - Production
-# Stored in R2: sndbrd-store/config/production.yaml
-# Billing section must match pricing/fixtures.yaml (meter: voice_hours)
-#
-# Push to R2: bun run engine-config:push (or manual wrangler r2 object put)
+# SNDBRD Engine Configuration - Development Environment
+# Stored in R2: sndbrd-store/config/dev.yaml
+# Used when deploying with: wrangler deploy --env dev
 
 version: "1.0.0"
-lastUpdated: "2026-02-22T00:00:00Z"
-environment: "production"
+lastUpdated: "2026-02-09T00:00:00Z"
+environment: "dev"
 
 # ============================================================================
-# Provider Stack Presets (minimal - engine still uses env vars for providers)
+# Provider Stack Presets
 # ============================================================================
+# Prime: Vowel Prime 1 branded model - Groq GPT-OSS-120B, Silero VAD, Deepgram TTS
+# Deepgram Voice: Full OSS voice stack using Deepgram for STT and TTS
 presets:
-  default:
-    name: "Default Stack"
-    description: "OpenRouter LLM, AssemblyAI STT, Inworld TTS"
+  prime:
+    name: "Prime"
+    description: "Vowel Prime 1 - Groq GPT-OSS-120B, Silero VAD, Deepgram TTS"
     llm:
-      provider: "openrouter"
-      model: "x-ai/grok-4-fast"
-      tokensPerHourRate: 80000
-      costMultiplier: 1.0
+      provider: "groq"
+      model: "openai/gpt-oss-120b"
+      tokensPerHourRate: 100000
+      costMultiplier: 0.8
     stt:
-      provider: "assemblyai"
+      provider: "deepgram"
+      model: "nova-3"
       sampleRate: 24000
-      encoding: "pcm_s16le"
-      costPerHour: 0.05
+      costPerHour: 0.0043
     tts:
-      provider: "inworld"
-      voice: "Ashley"
+      provider: "deepgram"
+      model: "aura-2-thalia-en"
       sampleRate: 24000
-      costPerHour: 0.10
+      costPerHour: 0.006
     vad:
-      provider: "assemblyai-integrated"
-      enabled: false
+      provider: "silero"
+      enabled: true
   deepgram-voice:
     name: "Deepgram Voice"
     description: "Full OSS voice stack using Deepgram for STT and TTS"
     llm:
-      provider: "openrouter"
-      model: "x-ai/grok-4-fast"
+      provider: "groq"
+      model: "moonshotai/kimi-k2-instruct-0905"
       tokensPerHourRate: 80000
       costMultiplier: 1.0
     stt:
@@ -54,78 +54,109 @@ presets:
     vad:
       provider: "none"
       enabled: false
-  modulate-voice:
-    name: "Modulate Voice"
-    description: "Hosted stack using Modulate Velma-2 STT with Inworld TTS"
-    llm:
-      provider: "openrouter"
-      model: "x-ai/grok-4-fast"
-      tokensPerHourRate: 80000
-      costMultiplier: 1.0
-    stt:
-      provider: "modulate"
-      sampleRate: 24000
-      numChannels: 1
-      audioFormat: "s16le"
-      costPerHour: 0.06
-    tts:
-      provider: "inworld"
-      voice: "Ashley"
-      sampleRate: 24000
-      costPerHour: 0.10
-    vad:
-      provider: "silero"
-      enabled: true
 
-defaultPreset: "default"
+defaultPreset: "prime"
 
 # ============================================================================
-# Engine Runtime Settings (minimal - engine still uses env vars)
+# Engine Runtime Settings
 # ============================================================================
 settings:
+  # Server VAD (from AutoParts: threshold 0.5, prefixPaddingMs 350, silenceDurationMs 550)
   vad:
-    enabled: false
+    enabled: true
     threshold: 0.5
     minSilenceMs: 550
-    speechPadMs: 0
+    speechPadMs: 350
+
   turnDetection:
-    enabled: false
+    enabled: true
+    provider: "groq"
+    model: "llama-3.1-8b-instant"
+    debounceMs: 150
+    timeoutMs: 3000
+
   languageDetection:
     enabled: true
+
   callDuration:
     maxCallDurationMs: 1800000
     maxIdleDurationMs: 600000
+
   agent:
     useModularAgents: true
     defaultType: "custom"
+    disableStreaming: false
+    maxStreamRetries: 3
+    maxToolRetries: 3
+    maxSteps: 30
+    defaultTemperature: null
+    defaultFrequencyPenalty: 1.2
+    defaultPresencePenalty: 1.2
+    defaultRepetitionPenalty: 1.2
+
+  speech:
+    defaultMode: "implicit"
+
+  subagent:
+    enabled: false
+    model: null
+    provider: null
+    temperature: 0.3
+    maxTokens: 2000
+
+  posthog:
+    enabled: true
+    host: "https://app.posthog.com"
+
+  acknowledgement:
+    enabled: false
+    delayMs: 300
+    phrases: ["okay"]
+
+  typingSound:
+    enabled: false
+    r2Key: "typing-sound.pcm"
+    volume: 0.3
+    loopDurationMs: 2000
+
+  clickSound:
+    r2Key: "mouse-click-sound.pcm"
+    probability: 0.15
+
+  audio:
+    sampleRate: 24000
+    format: "pcm16"
+    channels: 1
 
 # ============================================================================
 # Billing Configuration
-# MUST match pricing/fixtures.yaml (meter name, tiers)
-# enabled: true = billing on. enabled: false = same as TEST_MODE (billing off)
 # ============================================================================
 billing:
-  enabled: true
   polar:
     meter: "voice_hours"
   tokenConversion:
     tokensPerHourRate: 80000
   tiers:
+    free:
+      name: "Free"
+      hourlyRate: 0.00
+      tokensPerHourAllowance: 10000
+      overageRatePerHour: null
     starter:
       name: "Starter"
-      hourlyRate: 1.59
+      hourlyRate: 6.00
       tokensPerHourAllowance: 50000
-      overageRatePerHour: 1.59
-    professional:
-      name: "Professional"
-      hourlyRate: 1.59
+      overageRatePerHour: 3.00
+    growth:
+      name: "Growth"
+      hourlyRate: 4.80
       tokensPerHourAllowance: 200000
-      overageRatePerHour: 1.59
-    business:
-      name: "Business"
-      hourlyRate: 1.59
-      tokensPerHourAllowance: 600000
-      overageRatePerHour: 1.59
+      overageRatePerHour: 2.40
+    pro:
+      name: "Pro"
+      hourlyRate: 3.60
+      tokensPerHourAllowance: 1000000
+      overageRatePerHour: 1.80
   defaultTier: "starter"
   abandonment:
     timeoutMs: 30000

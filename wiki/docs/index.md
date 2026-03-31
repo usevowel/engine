@@ -7,7 +7,7 @@ Real-time voice AI engine with OpenAI-compatible WebSocket protocol.
 ## Features
 
 - 🚀 **Real-time Voice AI** - Sub-second latency for natural conversations
-- 🌍 **Edge Computing** - Deployed on 300+ Cloudflare locations worldwide
+- 🛠️ **Local Bun Runtime** - Fast local development with Bun
 - 🔌 **OpenAI Compatible** - Drop-in replacement for OpenAI Realtime API
 - 🧩 **Modular Architecture** - Swap LLM, STT, TTS, and VAD providers
 - 🔐 **Secure by Default** - Ephemeral tokens, JWT authentication, scoped API keys
@@ -77,9 +77,9 @@ Server runs at `http://localhost:8787`.
 
 ### 🚀 Deployment
 
-- [Cloudflare Workers](/deployment/cloudflare) - Production deployment guide
+- [Local Development](/deployment/local-dev) - Bun-based local setup
 - [Environment Variables](/deployment/env-vars) - Configuration reference
-- [Local Development](/deployment/local-dev) - Development setup
+- [Production Deployment](/deployment/cloudflare) - Optional Cloudflare Workers guide
 
 ### 📖 Guides
 
@@ -94,8 +94,8 @@ Server runs at `http://localhost:8787`.
 
 ```
 ┌─────────────────────────────────────────────────┐
-│                 Cloudflare Workers                 │
-│                 (Global Edge Network)                 │
+│                   Bun Runtime                      │
+│                (Local Development)                 │
 └──────────────────────┬──────────────────────────────┘
                        │
      ┌─────────────────┼─────────────────┐

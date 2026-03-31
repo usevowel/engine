@@ -15,7 +15,7 @@ const DEFAULT_VALUES = {
 } as const;
 
 export interface SessionBootstrapEnv {
-  INWORLD_VOICE?: string;
+  DEFAULT_VOICE?: string;
   STT_PROVIDER?: string;
   VAD_PROVIDER?: string;
   VAD_ENABLED?: string;
@@ -46,10 +46,10 @@ export interface TokenAgentConfig {
 }
 
 function buildTurnDetectionConfig(env: SessionBootstrapEnv): any | null {
-  const vadProvider = env.VAD_PROVIDER || 'assemblyai-integrated';
+  const vadProvider = env.VAD_PROVIDER || 'silero';
   const vadEnabled = vadProvider !== 'none' && env.VAD_ENABLED !== 'false';
 
-  if (!vadEnabled || vadProvider === 'assemblyai-integrated' || vadProvider === 'fennec-integrated') {
+  if (!vadEnabled) {
     return null;
   }
 
@@ -78,10 +78,10 @@ export function buildSessionConfig(
   tokenAgentConfig?: TokenAgentConfig,
   tokenLanguageVoiceMap?: Record<string, string>
 ): SessionData {
-  const defaultVoice = tokenVoice || env.INWORLD_VOICE || DEFAULT_VALUES.defaultVoice;
+  const defaultVoice = tokenVoice || DEFAULT_VALUES.defaultVoice;
   const speakingRate =
-    tokenSpeakingRate ?? runtimeConfig.providers.tts.inworld?.speakingRate ?? DEFAULT_VALUES.speakingRate;
-  const vadProvider = env.VAD_PROVIDER || 'assemblyai-integrated';
+    tokenSpeakingRate ?? DEFAULT_VALUES.speakingRate;
+  const vadProvider = env.VAD_PROVIDER || 'silero';
   const vadEnabled = vadProvider !== 'none' && env.VAD_ENABLED !== 'false';
   const turnDetection = buildTurnDetectionConfig(env);
 
@@ -153,7 +153,7 @@ export function buildSessionConfig(
       input_audio_format: 'pcm16',
       output_audio_format: 'pcm16',
       input_audio_transcription: {
-        model: `${env.STT_PROVIDER || 'assemblyai'}-realtime`,
+        model: `${env.STT_PROVIDER || 'groq-whisper'}-realtime`,
       },
       turn_detection: turnDetection,
       tools: [],

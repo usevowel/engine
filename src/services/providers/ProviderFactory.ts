@@ -3,9 +3,6 @@
  * 
  * Factory for creating provider instances based on configuration.
  * Uses ProviderRegistry for dynamic provider lookup.
- * 
- * For Node.js/Bun environments with ONNX support, use ProviderFactoryNode.ts
- * which extends this class and adds Silero VAD support.
  */
 
 import { ISTTProvider, ITTSProvider, IVADProvider } from '../../types/providers';

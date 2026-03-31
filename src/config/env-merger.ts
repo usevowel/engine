@@ -46,10 +46,7 @@ export function mergeR2ConfigIntoEnv(env: EnvLike, config: EngineConfig): EnvLik
       'GROQ_API_KEY',
       'OPENROUTER_API_KEY',
       'CEREBRAS_API_KEY',
-      'ASSEMBLYAI_API_KEY',
-      'MODULATE_API_KEY',
-      'INWORLD_API_KEY',
-      'FENNEC_API_KEY',
+      'DEEPGRAM_API_KEY',
       'POLAR_API_KEY',
       'POSTHOG_API_KEY',
     ];
@@ -166,32 +163,11 @@ export function mergeR2ConfigIntoEnv(env: EnvLike, config: EngineConfig): EnvLik
     if (!merged.WORKERS_AI_MODEL && defaultPreset.llm?.model) {
       merged.WORKERS_AI_MODEL = defaultPreset.llm.model;
     }
-    if (!merged.INWORLD_VOICE && defaultPreset.tts?.voice) {
-      merged.INWORLD_VOICE = defaultPreset.tts.voice;
+    if (!merged.VAD_PROVIDER && defaultPreset.vad?.provider) {
+      merged.VAD_PROVIDER = defaultPreset.vad.provider;
     }
-    if (!merged.ASSEMBLYAI_SAMPLE_RATE && defaultPreset.stt?.sampleRate) {
-      merged.ASSEMBLYAI_SAMPLE_RATE = String(defaultPreset.stt.sampleRate);
-    }
-    if (!merged.ASSEMBLYAI_ENCODING && defaultPreset.stt?.encoding) {
-      merged.ASSEMBLYAI_ENCODING = defaultPreset.stt.encoding;
-    }
-    if (!merged.MODULATE_SAMPLE_RATE && defaultPreset.stt?.provider === 'modulate' && defaultPreset.stt?.sampleRate) {
-      merged.MODULATE_SAMPLE_RATE = String(defaultPreset.stt.sampleRate);
-    }
-    if (!merged.MODULATE_NUM_CHANNELS && defaultPreset.stt?.provider === 'modulate' && defaultPreset.stt?.numChannels) {
-      merged.MODULATE_NUM_CHANNELS = String(defaultPreset.stt.numChannels);
-    }
-    if (!merged.MODULATE_AUDIO_FORMAT && defaultPreset.stt?.provider === 'modulate' && defaultPreset.stt?.audioFormat) {
-      merged.MODULATE_AUDIO_FORMAT = defaultPreset.stt.audioFormat;
-    }
-    if (!merged.INWORLD_SAMPLE_RATE && defaultPreset.tts?.sampleRate) {
-      merged.INWORLD_SAMPLE_RATE = String(defaultPreset.tts.sampleRate);
-    }
-    if (defaultPreset.vad) {
-      if (!merged.VAD_PROVIDER) merged.VAD_PROVIDER = defaultPreset.vad.provider;
-      if (defaultPreset.vad.enabled !== undefined && !merged.VAD_ENABLED) {
-        merged.VAD_ENABLED = defaultPreset.vad.enabled ? 'true' : 'false';
-      }
+    if (defaultPreset.vad?.enabled !== undefined && !merged.VAD_ENABLED) {
+      merged.VAD_ENABLED = defaultPreset.vad.enabled ? 'true' : 'false';
     }
   }
 

@@ -37,9 +37,7 @@ export async function handleSessionUpdate(ws: ServerWebSocket<SessionData>, even
   const data = ws.data;
   const transcriptionModel = data.config.input_audio_transcription?.model || '';
   const usesIntegratedVAD =
-    (data.runtimeConfig ? SessionManager.isVADIntegrated(data.runtimeConfig) : false) ||
-    transcriptionModel.startsWith('assemblyai-') ||
-    transcriptionModel.startsWith('fennec-');
+    (data.runtimeConfig ? SessionManager.isVADIntegrated(data.runtimeConfig) : false);
   
   // Debug: Log what the client is sending
   getEventSystem().info(EventCategory.SESSION, '📥 session.update received:', JSON.stringify({

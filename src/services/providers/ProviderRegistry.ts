@@ -19,6 +19,15 @@ export interface ProviderRegistration<P, C> {
   capabilities: ProviderCapabilities;
   configSchema: z.ZodSchema<C>;
   factory: (config: C, fullRuntimeConfig?: RuntimeProviderConfig) => P | Promise<P>;
+  /** Optional cost metadata for analytics and usage tracking */
+  costConfig?: {
+    costPerMinute?: number;
+    costPerCharacter?: number;
+    costPer1KInputTokens?: number;
+    costPer1KOutputTokens?: number;
+    unit?: 'minute' | 'character' | 'token' | 'request';
+    notes?: string;
+  };
 }
 
 /**

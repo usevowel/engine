@@ -1,37 +1,37 @@
-# SNDBRD Engine Configuration - Testing Environment
-# Stored in R2: sndbrd-store/config/testing.yaml
-# Used when deploying with: wrangler deploy --env testing
+# SNDBRD Engine Configuration - Development Environment
+# Stored in R2: sndbrd-store/config/dev.yaml
+# Used when deploying with: wrangler deploy --env dev
 
 version: "1.0.0"
 lastUpdated: "2026-02-09T00:00:00Z"
-environment: "testing"
+environment: "dev"
 
 # ============================================================================
 # Provider Stack Presets
 # ============================================================================
-# Prime: Vowel Prime 1 branded model - matches AutoParts demo config in sales repo
-# - Groq GPT-OSS-120B, Server VAD (AssemblyAI integrated), Inworld TTS
+# Prime: Vowel Prime 1 branded model - Groq GPT-OSS-120B, Silero VAD, Deepgram TTS
+# Deepgram Voice: Full OSS voice stack using Deepgram for STT and TTS
 presets:
   prime:
     name: "Prime"
-    description: "Vowel Prime 1 - Groq GPT-OSS-120B, Server VAD (AssemblyAI), Inworld TTS"
+    description: "Vowel Prime 1 - Groq GPT-OSS-120B, Silero VAD, Deepgram TTS"
     llm:
       provider: "groq"
       model: "openai/gpt-oss-120b"
       tokensPerHourRate: 100000
       costMultiplier: 0.8
     stt:
-      provider: "assemblyai"
+      provider: "deepgram"
+      model: "nova-3"
       sampleRate: 24000
-      encoding: "pcm_s16le"
-      costPerHour: 0.05
+      costPerHour: 0.0043
     tts:
-      provider: "inworld"
-      voice: "Alex"
+      provider: "deepgram"
+      model: "aura-2-thalia-en"
       sampleRate: 24000
-      costPerHour: 0.10
+      costPerHour: 0.006
     vad:
-      provider: "assemblyai-integrated"
+      provider: "silero"
       enabled: true
   deepgram-voice:
     name: "Deepgram Voice"
@@ -54,28 +54,6 @@ presets:
     vad:
       provider: "none"
       enabled: false
-  modulate-voice:
-    name: "Modulate Voice"
-    description: "Hosted stack using Modulate Velma-2 STT with Inworld TTS"
-    llm:
-      provider: "groq"
-      model: "moonshotai/kimi-k2-instruct-0905"
-      tokensPerHourRate: 80000
-      costMultiplier: 1.0
-    stt:
-      provider: "modulate"
-      sampleRate: 24000
-      numChannels: 1
-      audioFormat: "s16le"
-      costPerHour: 0.06
-    tts:
-      provider: "inworld"
-      voice: "Ashley"
-      sampleRate: 24000
-      costPerHour: 0.10
-    vad:
-      provider: "silero"
-      enabled: true
 
 defaultPreset: "prime"
 
@@ -91,7 +69,7 @@ settings:
     speechPadMs: 350
 
   turnDetection:
-    enabled: false
+    enabled: true
     provider: "groq"
     model: "llama-3.1-8b-instant"
     debounceMs: 150

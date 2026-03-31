@@ -41,12 +41,11 @@ export interface AgentConfig {
 
 /**
  * Turn Detection Configuration
- * Supports both AssemblyAI presets and client-side VAD mode
  */
 export type TurnDetectionConfig = 
-  // AssemblyAI streaming STT presets
+  // Turn detection presets
   | 'aggressive' | 'balanced' | 'conservative' 
-  // Custom AssemblyAI config
+  // Custom turn detection config
   | {
       endOfTurnConfidenceThreshold?: number;
       minEndOfTurnSilenceWhenConfident?: number;
@@ -79,64 +78,21 @@ export interface LanguageDetectionConfig {
 export interface ProviderConfig {
   /** STT provider selection */
   stt?: {
-    provider?: 'groq-whisper' | 'fennec' | 'assemblyai' | 'mistral-voxtral-realtime' | 'modulate';
-    /** Fennec-specific configuration */
-    fennec?: {
-      sampleRate?: number;
-      channels?: number;
-      detectThoughts?: boolean;
-      endThoughtEagerness?: 'high' | 'medium' | 'low';
-      forceCompleteTime?: number;
-      vad?: {
-        threshold?: number;
-        min_silence_ms?: number;
-        speech_pad_ms?: number;
-      };
-    };
-    /** AssemblyAI-specific configuration */
-    assemblyai?: {
-      sampleRate?: number;
-      encoding?: string;
-      wordBoost?: string[];
-    };
-    /** Mistral Voxtral Realtime-specific configuration */
-    mistralVoxtralRealtime?: {
-      model?: string;
-      sampleRate?: number;
-      language?: string;
-    };
-    /** Modulate-specific configuration */
-    modulate?: {
-      sampleRate?: number;
-      numChannels?: number;
-      audioFormat?: string;
-      speakerDiarization?: boolean;
-      emotionSignal?: boolean;
-      accentSignal?: boolean;
-      piiPhiTagging?: boolean;
-      partialResults?: boolean;
-      batchUrl?: string;
-      streamingUrl?: string;
-    };
+    provider?: string;
+    /** Provider-specific configuration (validated by ProviderRegistry at runtime) */
+    config?: Record<string, unknown>;
   };
   /** VAD provider selection (auto-set based on STT provider if not specified) */
   vad?: {
-    provider?: 'silero' | 'fennec-integrated' | 'assemblyai-integrated' | 'none';
-    /** Silero-specific configuration */
-    silero?: {
-      threshold?: number;
-      minSilenceDurationMs?: number;
-      speechPadMs?: number;
-    };
+    provider?: string;
+    /** Provider-specific configuration */
+    config?: Record<string, unknown>;
   };
   /** TTS provider selection */
   tts?: {
-    provider?: 'inworld';
-    /** Inworld-specific configuration */
-    inworld?: {
-      voice?: string;
-      sampleRate?: number;
-    };
+    provider?: string;
+    /** Provider-specific configuration */
+    config?: Record<string, unknown>;
   };
 }
 

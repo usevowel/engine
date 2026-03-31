@@ -40,7 +40,14 @@ PORT="3001"
 NODE_ENV="development"
 
 # Voice
-INWORLD_VOICE="Ashley"
+DEFAULT_VOICE="Ashley"
+
+# Deepgram STT/TTS
+DEEPGRAM_API_KEY="your-deepgram-api-key"
+STT_PROVIDER="deepgram"
+TTS_PROVIDER="deepgram"
+DEEPGRAM_STT_MODEL="nova-3"
+DEEPGRAM_TTS_MODEL="aura-2-thalia-en"
 
 # VAD
 VAD_ENABLED="true"

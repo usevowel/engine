@@ -14,20 +14,29 @@
  * The `provider` field is a string name validated against ProviderRegistry.
  * The `config` field holds provider-specific options validated against the
  * registered Zod schema for that provider.
+ * 
+ * Type parameters allow typed access when the config shape is known:
+ * - `STTConfig` — e.g. `z.infer<typeof GroqWhisperConfig>`
+ * - `TTSConfig` — e.g. `z.infer<typeof DeepgramTTSConfig>`
+ * - `VADConfig` — e.g. `z.infer<typeof SileroVADConfig>`
  */
-export interface RuntimeProviderConfig {
+export interface RuntimeProviderConfig<
+  STTConfig = unknown,
+  TTSConfig = unknown,
+  VADConfig = unknown,
+> {
   stt: {
     provider: string;
-    config: unknown;
+    config: STTConfig;
   };
   tts: {
     provider: string;
-    config: unknown;
+    config: TTSConfig;
   };
   vad: {
     provider: string;
     enabled: boolean;
-    config?: unknown;
+    config?: VADConfig;
   };
 }
 

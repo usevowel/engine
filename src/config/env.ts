@@ -249,7 +249,7 @@ export function validateModel(model?: string): string {
  */
 export function validateVoice(voice?: string, availableVoices: string[] = []): string {
   if (!voice) {
-    return 'Ashley'; // Default Inworld voice
+    return 'Ashley'; // Default voice
   }
   
   if (availableVoices.length > 0 && !availableVoices.includes(voice)) {

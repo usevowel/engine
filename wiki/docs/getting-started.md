@@ -7,7 +7,6 @@ Get up and running with sndbrd in 5 minutes.
 Before you begin, ensure you have:
 
 - Node.js 18+ or Bun 1.0+
-- A Cloudflare account (for deployment)
 - API keys for LLM provider (Groq or OpenRouter)
 
 ## Installation
@@ -51,6 +50,17 @@ bun run dev
 ```
 
 The server starts on `http://localhost:8787`.
+
+## Deepgram Voice Setup
+
+If you want speech-to-text and text-to-speech enabled locally, add:
+
+```bash
+DEEPGRAM_API_KEY="your-deepgram-api-key"
+STT_PROVIDER="deepgram"
+TTS_PROVIDER="deepgram"
+DEFAULT_VOICE="Ashley"
+```
 
 ## Test the Connection
 

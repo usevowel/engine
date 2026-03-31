@@ -416,7 +416,9 @@ export async function handleStreamingTranscript(ws: ServerWebSocket<SessionData>
   let cleanedTranscript = transcript;
   const groqApiKey = data.runtimeConfig?.llm.provider === 'groq'
     ? data.runtimeConfig.llm.apiKey
-    : data.runtimeConfig?.providers?.stt?.groqWhisper?.apiKey;
+    : (data.runtimeConfig?.providers?.stt?.provider === 'groq-whisper'
+      ? (data.runtimeConfig.providers.stt.config as Record<string, unknown>)?.apiKey as string | undefined
+      : undefined);
   
   if (groqApiKey && transcript.trim().length > 0) {
     try {
@@ -644,7 +646,9 @@ export async function handleAudioCommit(ws: ServerWebSocket<SessionData>, event:
     let cleanedTranscript = transcript;
     const groqApiKey = data.runtimeConfig?.llm.provider === 'groq'
       ? data.runtimeConfig.llm.apiKey
-      : data.runtimeConfig?.providers?.stt?.groqWhisper?.apiKey;
+      : (data.runtimeConfig?.providers?.stt?.provider === 'groq-whisper'
+        ? (data.runtimeConfig.providers.stt.config as Record<string, unknown>)?.apiKey as string | undefined
+        : undefined);
     
     if (groqApiKey && transcript.trim().length > 0) {
       try {

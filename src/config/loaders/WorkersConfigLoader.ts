@@ -324,13 +324,6 @@ export class WorkersConfigLoader implements ConfigLoader {
     if (this.env.VAD_ENABLED === 'false') {
       return 'none';
     }
-    // Integrated VAD providers are hosted-only; default to 'silero' for OSS
-    if (sttProvider === 'fennec') {
-      return 'fennec-integrated';
-    }
-    if (sttProvider === 'assemblyai') {
-      return 'assemblyai-integrated';
-    }
     return 'silero';
   }
 }

@@ -80,8 +80,8 @@ export class SessionManager {
    * @param config Runtime configuration
    */
   static isVADIntegrated(config: RuntimeConfig): boolean {
-    return config.providers.vad.provider === 'fennec-integrated' || 
-           config.providers.vad.provider === 'assemblyai-integrated';
+    const provider = config.providers.vad.provider;
+    return provider.endsWith('-integrated');
   }
 
   /**

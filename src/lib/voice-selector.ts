@@ -10,7 +10,7 @@ import {
   getVoicesForLanguage,
   isLanguageSupported,
   type VoiceGender 
-} from '../config/inworld-voices';
+} from '../config/tts-voices';
 import { getEventSystem, EventCategory } from '../events';
 
 export interface VoiceSelectorImplementation {

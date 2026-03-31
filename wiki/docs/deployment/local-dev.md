@@ -26,17 +26,10 @@ bun run test:connection
 bun run test:browser
 ```
 
-## Cloudflare Tunnel
+## Public Access
 
-For testing with a public URL:
-
-```bash
-# Install cloudflared
-# https://developers.cloudflare.com/cloudflare-one/connections/connect-apps/install-and-setup/
-
-# Start tunnel
-./scripts/start-worker-tunnel.sh
-```
+For local testing, keep the server on `bun run dev` and point your client at `http://localhost:8787`.
+If you need a public URL for a demo, use any standard reverse proxy you already have installed.
 
 ## Demo Application
 
