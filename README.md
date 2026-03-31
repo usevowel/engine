@@ -2,7 +2,7 @@
 
 > OpenAI-compatible real-time voice API server with modular runtimes and flexible LLM providers
 
-A production-ready real-time voice API server that implements the OpenAI Realtime API protocol, compatible with the [OpenAI Agents JS SDK](https://openai.github.io/openai-agents-js/guides/voice-agents/quickstart/). The shared engine logic lives in `src/`, while deployment-specific integrations can be added via packages under `packages/`.
+> **⚠️ Beta Release** — This open-source release is in beta. You may encounter rough edges, incomplete features, or breaking changes. We are actively reviewing and merging community PRs, but please expect some instability as we iterate toward a stable release. Your feedback and contributions are welcome.
 
 ## What's New
 
