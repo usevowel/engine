@@ -67,6 +67,13 @@ export const STT_COSTS: STTCostConfig[] = [
     unit: 'minute',
     notes: 'Streaming with integrated VAD',
   },
+  {
+    provider: 'modulate',
+    model: 'velma-2-stt-streaming',
+    costPerMinute: 0.001,
+    unit: 'minute',
+    notes: 'Velma-2 streaming STT ($0.06/hour) with partial and final utterances',
+  },
 ];
 
 // =============================================================================

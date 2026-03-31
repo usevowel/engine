@@ -69,6 +69,19 @@ export interface WorkersEnv {
   /** When "true", ignores any token/client VAD config (preset, silence duration, etc.) and uses env-configured preset */
   ASSEMBLYAI_VAD_CONFIG_LOCKED?: string;
 
+  // Modulate
+  MODULATE_API_KEY?: string;
+  MODULATE_SAMPLE_RATE?: string;
+  MODULATE_NUM_CHANNELS?: string;
+  MODULATE_AUDIO_FORMAT?: string;
+  MODULATE_SPEAKER_DIARIZATION?: string;
+  MODULATE_EMOTION_SIGNAL?: string;
+  MODULATE_ACCENT_SIGNAL?: string;
+  MODULATE_PII_PHI_TAGGING?: string;
+  MODULATE_PARTIAL_RESULTS?: string;
+  MODULATE_BATCH_URL?: string;
+  MODULATE_STREAMING_URL?: string;
+
   // Mistral Voxtral Realtime
   MISTRAL_API_KEY?: string;
   MISTRAL_VOXTRAL_MODEL?: string;
@@ -126,7 +139,7 @@ export class WorkersConfigLoader implements ConfigLoader {
   
   load(): RuntimeConfig {
     // Determine providers
-    const sttProvider = (this.env.STT_PROVIDER || 'assemblyai') as 'groq-whisper' | 'fennec' | 'assemblyai' | 'mistral-voxtral-realtime';
+    const sttProvider = (this.env.STT_PROVIDER || 'assemblyai') as 'groq-whisper' | 'fennec' | 'assemblyai' | 'mistral-voxtral-realtime' | 'modulate';
     const ttsProvider = (this.env.TTS_PROVIDER || 'inworld') as 'inworld';
     const vadProvider = this.determineVADProvider(sttProvider);
     
@@ -209,6 +222,19 @@ export class WorkersConfigLoader implements ConfigLoader {
             encoding: this.env.ASSEMBLYAI_ENCODING || 'pcm_s16le',
             wordBoost: this.env.ASSEMBLYAI_WORD_BOOST ? this.env.ASSEMBLYAI_WORD_BOOST.split(',') : [],
             vadConfigLocked: this.env.ASSEMBLYAI_VAD_CONFIG_LOCKED === 'true',
+          } : undefined,
+          modulate: sttProvider === 'modulate' ? {
+            apiKey: this.env.MODULATE_API_KEY || '',
+            sampleRate: parseInt(this.env.MODULATE_SAMPLE_RATE || '24000', 10),
+            numChannels: parseInt(this.env.MODULATE_NUM_CHANNELS || '1', 10),
+            audioFormat: this.env.MODULATE_AUDIO_FORMAT || 's16le',
+            speakerDiarization: this.env.MODULATE_SPEAKER_DIARIZATION === 'true',
+            emotionSignal: this.env.MODULATE_EMOTION_SIGNAL === 'true',
+            accentSignal: this.env.MODULATE_ACCENT_SIGNAL === 'true',
+            piiPhiTagging: this.env.MODULATE_PII_PHI_TAGGING === 'true',
+            partialResults: this.env.MODULATE_PARTIAL_RESULTS !== 'false',
+            batchUrl: this.env.MODULATE_BATCH_URL,
+            streamingUrl: this.env.MODULATE_STREAMING_URL,
           } : undefined,
           mistralVoxtralRealtime: sttProvider === 'mistral-voxtral-realtime' ? {
             apiKey: this.env.MISTRAL_API_KEY || '',

@@ -181,7 +181,7 @@ Add voice to:
 
 ## License
 
-MIT License - Open source, free to use in commercial and personal projects.
+Server Side Public License v1 (SSPL-1.0) - source-available.
 
 ---
 

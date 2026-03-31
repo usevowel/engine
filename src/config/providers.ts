@@ -11,7 +11,7 @@ import { getEventSystem, EventCategory } from '../events';
 /**
  * Provider type enums
  */
-export const STTProviderType = z.enum(['groq-whisper', 'fennec', 'assemblyai', 'mistral-voxtral-realtime', 'deepgram']);
+export const STTProviderType = z.enum(['groq-whisper', 'fennec', 'assemblyai', 'mistral-voxtral-realtime', 'deepgram', 'modulate']);
 export const TTSProviderType = z.enum(['inworld', 'deepgram']);
 export const VADProviderType = z.enum(['silero', 'fennec-integrated', 'assemblyai-integrated', 'none']);
 
@@ -68,6 +68,20 @@ const DeepgramSTTConfig = z.object({
   sampleRate: z.number().default(16000),
 });
 
+const ModulateSTTConfig = z.object({
+  apiKey: z.string().min(1, 'Modulate API key is required'),
+  sampleRate: z.number().default(24000),
+  numChannels: z.number().default(1),
+  audioFormat: z.string().default('s16le'),
+  speakerDiarization: z.boolean().default(false),
+  emotionSignal: z.boolean().default(false),
+  accentSignal: z.boolean().default(false),
+  piiPhiTagging: z.boolean().default(false),
+  partialResults: z.boolean().default(true),
+  batchUrl: z.string().url().default('https://modulate-developer-apis.com/api/velma-2-stt-batch'),
+  streamingUrl: z.string().url().default('wss://modulate-developer-apis.com/api/velma-2-stt-streaming'),
+});
+
 const InworldTTSConfig = z.object({
   apiKey: z.string().min(1, 'Inworld API key is required'),
   modelId: z.string().default('inworld-tts-1.5-mini'),
@@ -101,6 +115,7 @@ const ProviderConfigSchema = z.object({
     assemblyai: AssemblyAIConfig.optional(),
     mistralVoxtralRealtime: MistralVoxtralRealtimeConfig.optional(),
     deepgram: DeepgramSTTConfig.optional(),
+    modulate: ModulateSTTConfig.optional(),
   }),
   tts: z.object({
     provider: TTSProviderType,
@@ -149,6 +164,8 @@ export function loadProviderConfig(): ProviderConfig {
     vadProvider = 'fennec-integrated';
   } else if (sttProvider === 'assemblyai') {
     vadProvider = 'assemblyai-integrated';
+  } else if (sttProvider === 'modulate') {
+    vadProvider = 'silero';
   } else {
     vadProvider = 'silero';
   }
@@ -196,6 +213,19 @@ export function loadProviderConfig(): ProviderConfig {
         model: env.DEEPGRAM_STT_MODEL || 'nova-3',
         language: env.DEEPGRAM_STT_LANGUAGE || 'en-US',
         sampleRate: parseInt(env.DEEPGRAM_STT_SAMPLE_RATE || '16000', 10),
+      } : undefined,
+      modulate: sttProvider === 'modulate' ? {
+        apiKey: env.MODULATE_API_KEY || '',
+        sampleRate: parseInt(env.MODULATE_SAMPLE_RATE || '24000', 10),
+        numChannels: parseInt(env.MODULATE_NUM_CHANNELS || '1', 10),
+        audioFormat: env.MODULATE_AUDIO_FORMAT || 's16le',
+        speakerDiarization: env.MODULATE_SPEAKER_DIARIZATION === 'true',
+        emotionSignal: env.MODULATE_EMOTION_SIGNAL === 'true',
+        accentSignal: env.MODULATE_ACCENT_SIGNAL === 'true',
+        piiPhiTagging: env.MODULATE_PII_PHI_TAGGING === 'true',
+        partialResults: env.MODULATE_PARTIAL_RESULTS !== 'false',
+        batchUrl: env.MODULATE_BATCH_URL || 'https://modulate-developer-apis.com/api/velma-2-stt-batch',
+        streamingUrl: env.MODULATE_STREAMING_URL || 'wss://modulate-developer-apis.com/api/velma-2-stt-streaming',
       } : undefined,
     },
     tts: {

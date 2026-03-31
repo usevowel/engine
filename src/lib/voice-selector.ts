@@ -13,6 +13,24 @@ import {
 } from '../config/inworld-voices';
 import { getEventSystem, EventCategory } from '../events';
 
+export interface VoiceSelectorImplementation {
+  detectVoiceGender: (voiceId: string) => VoiceGender | null;
+  selectVoiceForLanguage: (
+    language: string,
+    preferredGender: VoiceGender | null,
+    fallbackVoice?: string,
+    currentVoice?: string | null
+  ) => string;
+}
+
+let registeredImplementation: VoiceSelectorImplementation | null = null;
+
+export function registerVoiceSelectorImplementation(
+  implementation: VoiceSelectorImplementation | null
+): void {
+  registeredImplementation = implementation;
+}
+
 /**
  * Determine gender from a voice name (heuristic)
  * 
@@ -20,6 +38,10 @@ import { getEventSystem, EventCategory } from '../events';
  * @returns The detected gender, or null if unknown
  */
 export function detectVoiceGender(voiceId: string): VoiceGender | null {
+  if (registeredImplementation) {
+    return registeredImplementation.detectVoiceGender(voiceId);
+  }
+
   if (!voiceId) return null;
   
   const lowerVoice = voiceId.toLowerCase();
@@ -79,6 +101,15 @@ export function selectVoiceForLanguage(
   fallbackVoice: string = 'Ashley',
   currentVoice?: string | null
 ): string {
+  if (registeredImplementation) {
+    return registeredImplementation.selectVoiceForLanguage(
+      language,
+      preferredGender,
+      fallbackVoice,
+      currentVoice
+    );
+  }
+
   // Normalize language code
   const normalizedLang = language.toLowerCase();
   

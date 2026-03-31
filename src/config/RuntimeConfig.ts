@@ -14,7 +14,7 @@
 export interface RuntimeProviderConfig {
   // STT Configuration
   stt: {
-    provider: 'groq-whisper' | 'fennec' | 'assemblyai' | 'mistral-voxtral-realtime' | 'deepgram';
+    provider: 'groq-whisper' | 'fennec' | 'assemblyai' | 'mistral-voxtral-realtime' | 'deepgram' | 'modulate';
     groqWhisper?: {
       apiKey: string;
       model: string;
@@ -40,6 +40,19 @@ export interface RuntimeProviderConfig {
       wordBoost?: string[];
       /** When true, ignores token/client VAD config and uses env-configured preset */
       vadConfigLocked?: boolean;
+    };
+    modulate?: {
+      apiKey: string;
+      sampleRate?: number;
+      numChannels?: number;
+      audioFormat?: string;
+      speakerDiarization?: boolean;
+      emotionSignal?: boolean;
+      accentSignal?: boolean;
+      piiPhiTagging?: boolean;
+      partialResults?: boolean;
+      batchUrl?: string;
+      streamingUrl?: string;
     };
     mistralVoxtralRealtime?: {
       apiKey: string;
@@ -231,6 +244,9 @@ export function validateConfig(config: RuntimeConfig): void {
   }
   if (sttProvider === 'deepgram' && !config.providers.stt.deepgram?.apiKey) {
     throw new Error('Deepgram API key is required for deepgram STT provider');
+  }
+  if (sttProvider === 'modulate' && !config.providers.stt.modulate?.apiKey) {
+    throw new Error('Modulate API key is required for modulate STT provider');
   }
   
   const ttsProvider = config.providers.tts.provider;

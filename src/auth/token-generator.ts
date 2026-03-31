@@ -79,7 +79,7 @@ export interface LanguageDetectionConfig {
 export interface ProviderConfig {
   /** STT provider selection */
   stt?: {
-    provider?: 'groq-whisper' | 'fennec' | 'assemblyai' | 'mistral-voxtral-realtime';
+    provider?: 'groq-whisper' | 'fennec' | 'assemblyai' | 'mistral-voxtral-realtime' | 'modulate';
     /** Fennec-specific configuration */
     fennec?: {
       sampleRate?: number;
@@ -104,6 +104,19 @@ export interface ProviderConfig {
       model?: string;
       sampleRate?: number;
       language?: string;
+    };
+    /** Modulate-specific configuration */
+    modulate?: {
+      sampleRate?: number;
+      numChannels?: number;
+      audioFormat?: string;
+      speakerDiarization?: boolean;
+      emotionSignal?: boolean;
+      accentSignal?: boolean;
+      piiPhiTagging?: boolean;
+      partialResults?: boolean;
+      batchUrl?: string;
+      streamingUrl?: string;
     };
   };
   /** VAD provider selection (auto-set based on STT provider if not specified) */

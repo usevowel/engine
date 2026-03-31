@@ -1,5 +1,5 @@
 {
-  "name": "sndbrd",
+  "name": "@usevowel/engine",
   "version": "0.1.0",
   "description": "OpenAI-compatible real-time voice API server with modular providers",
   "type": "module",
@@ -19,7 +19,6 @@
     "test:browser": "bun run test/browser-connection-test.ts",
     "test:playwright": "playwright test",
     "test:token": "bun run scripts/test-token-decoding.ts",
-    "postinstall": "./scripts/patch-ws-for-workers.sh",
     "version": "bun run scripts/version.ts",
     "version:major": "bun run scripts/version.ts --type major",
     "version:minor": "bun run scripts/version.ts --type minor",

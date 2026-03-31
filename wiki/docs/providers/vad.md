@@ -15,7 +15,15 @@ VAD_ENABLED=true
 VAD_THRESHOLD=0.5
 VAD_MIN_SILENCE_MS=550
 VAD_SPEECH_PAD_MS=0
+# Optional custom model path (Bun/Node self-hosted only)
+# SILERO_VAD_MODEL_PATH=./vendor/silero-vad/silero_vad.onnx
 ```
+
+## Runtime Support
+
+- `silero` is supported only in the self-hosted Bun/Node runtime.
+- Cloudflare Workers and hosted/private runtime paths should continue using integrated VAD providers or `none`.
+- The engine audio pipeline resamples 24kHz PCM16 input to 16kHz before Silero inference.
 
 ## Tuning Parameters
 

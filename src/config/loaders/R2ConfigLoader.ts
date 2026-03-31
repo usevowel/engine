@@ -35,6 +35,8 @@ export interface PresetConfig {
   stt: {
     provider: string;
     sampleRate?: number;
+    numChannels?: number;
+    audioFormat?: string;
     encoding?: string;
     whisperModel?: string;
     costPerHour?: number;

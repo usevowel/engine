@@ -152,4 +152,4 @@ This wiki includes enhancements from the platform-level docs:
 
 ## License
 
-MIT License - Same as sndbrd project.
+Server Side Public License v1 (SSPL-1.0).

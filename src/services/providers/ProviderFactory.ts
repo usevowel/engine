@@ -51,6 +51,9 @@ export class ProviderFactory {
       case 'assemblyai':
         throw new Error('AssemblyAI STT is hosted-only. Use the private engine-hosted runtime.');
 
+      case 'modulate':
+        throw new Error('Modulate STT is hosted-only. Use the private engine-hosted runtime.');
+
       case 'mistral-voxtral-realtime':
         if (!config.mistralVoxtralRealtime?.apiKey) {
           throw new Error('Mistral API key not configured');

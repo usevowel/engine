@@ -240,7 +240,7 @@ For local deployment with Core plus vowel engine, see the [self-hosted deploymen
 
 ## License
 
-This project is open source.
+This project is source-available under SSPL-1.0.
 
 ## Links
 

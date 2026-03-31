@@ -47,6 +47,7 @@ export function mergeR2ConfigIntoEnv(env: EnvLike, config: EngineConfig): EnvLik
       'OPENROUTER_API_KEY',
       'CEREBRAS_API_KEY',
       'ASSEMBLYAI_API_KEY',
+      'MODULATE_API_KEY',
       'INWORLD_API_KEY',
       'FENNEC_API_KEY',
       'POLAR_API_KEY',
@@ -173,6 +174,15 @@ export function mergeR2ConfigIntoEnv(env: EnvLike, config: EngineConfig): EnvLik
     }
     if (!merged.ASSEMBLYAI_ENCODING && defaultPreset.stt?.encoding) {
       merged.ASSEMBLYAI_ENCODING = defaultPreset.stt.encoding;
+    }
+    if (!merged.MODULATE_SAMPLE_RATE && defaultPreset.stt?.provider === 'modulate' && defaultPreset.stt?.sampleRate) {
+      merged.MODULATE_SAMPLE_RATE = String(defaultPreset.stt.sampleRate);
+    }
+    if (!merged.MODULATE_NUM_CHANNELS && defaultPreset.stt?.provider === 'modulate' && defaultPreset.stt?.numChannels) {
+      merged.MODULATE_NUM_CHANNELS = String(defaultPreset.stt.numChannels);
+    }
+    if (!merged.MODULATE_AUDIO_FORMAT && defaultPreset.stt?.provider === 'modulate' && defaultPreset.stt?.audioFormat) {
+      merged.MODULATE_AUDIO_FORMAT = defaultPreset.stt.audioFormat;
     }
     if (!merged.INWORLD_SAMPLE_RATE && defaultPreset.tts?.sampleRate) {
       merged.INWORLD_SAMPLE_RATE = String(defaultPreset.tts.sampleRate);

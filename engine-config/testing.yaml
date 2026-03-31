@@ -54,6 +54,28 @@ presets:
     vad:
       provider: "none"
       enabled: false
+  modulate-voice:
+    name: "Modulate Voice"
+    description: "Hosted stack using Modulate Velma-2 STT with Inworld TTS"
+    llm:
+      provider: "groq"
+      model: "moonshotai/kimi-k2-instruct-0905"
+      tokensPerHourRate: 80000
+      costMultiplier: 1.0
+    stt:
+      provider: "modulate"
+      sampleRate: 24000
+      numChannels: 1
+      audioFormat: "s16le"
+      costPerHour: 0.06
+    tts:
+      provider: "inworld"
+      voice: "Ashley"
+      sampleRate: 24000
+      costPerHour: 0.10
+    vad:
+      provider: "silero"
+      enabled: true
 
 defaultPreset: "prime"
 
