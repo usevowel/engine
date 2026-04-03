@@ -31,6 +31,10 @@ import { LanguageDetectionService } from '../../services/language-detection/Lang
 // Forward declaration - will be imported from response/index.ts
 let generateResponse: (ws: ServerWebSocket<SessionData>, options?: any) => Promise<void>;
 
+function shouldUseStreamingSTT(data: SessionData): boolean {
+  return data.providers?.stt.type === 'streaming' && data.config.turn_detection !== null;
+}
+
 /**
  * Set the generateResponse function (to avoid circular dependency)
  */
@@ -59,6 +63,11 @@ export async function handleAudioAppend(ws: ServerWebSocket<SessionData>, event:
     getEventSystem().info(EventCategory.SESSION, '☀️ Waking from hibernation - audio received');
     
     await exitHibernation(ws, async () => {
+      if (!shouldUseStreamingSTT(data)) {
+        getEventSystem().info(EventCategory.STT, '⏭️ Skipping STT stream reinit in client-side VAD mode');
+        return;
+      }
+
       // Reinitialize STT stream
       // Use same callbacks as initial STT setup
       data.sttStream = await data.providers!.stt.startStream({
@@ -193,7 +202,7 @@ export async function handleAudioAppend(ws: ServerWebSocket<SessionData>, event:
   
   // For streaming STT providers, start a streaming session if not already active
   // GUARD: Check both sttStream and sttStreamInitializing to prevent race conditions
-  if (data.providers.stt.type === 'streaming' && !data.sttStream && !data.sttStreamInitializing) {
+  if (shouldUseStreamingSTT(data) && !data.sttStream && !data.sttStreamInitializing) {
     getEventSystem().info(EventCategory.SESSION, '🎤 Starting streaming STT session');
     getEventSystem().info(EventCategory.SESSION, '🎯 Turn detection config:', { config: data.tokenTurnDetection || 'balanced (default)' });
     
@@ -326,7 +335,7 @@ export async function handleAudioAppend(ws: ServerWebSocket<SessionData>, event:
         getEventSystem().warn(EventCategory.STT, '⚠️  STT stream exists but is not active after 1s - cannot send audio');
       }
     }
-  } else {
+  } else if (shouldUseStreamingSTT(data)) {
     getEventSystem().warn(EventCategory.STT, '⚠️  No STT stream - audio not being sent to streaming provider');
   }
   

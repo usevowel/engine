@@ -244,6 +244,22 @@ export async function handleSessionUpdate(ws: ServerWebSocket<SessionData>, even
       audio: mergedAudio, // Use our deeply merged audio config
       turn_detection: turnDetectionConfig, // Use accumulated turn_detection
     };
+
+    if (turnDetectionConfig === null && data.sttStream) {
+      getEventSystem().info(EventCategory.STT, '🛑 Stopping streaming STT because client-side VAD is active');
+      try {
+        await data.sttStream.stop();
+      } catch (error) {
+        getEventSystem().error(
+          EventCategory.STT,
+          'Failed to stop streaming STT after switching to client-side VAD',
+          error instanceof Error ? error : new Error(String(error))
+        );
+      } finally {
+        data.sttStream = undefined;
+        data.sttStreamInitializing = false;
+      }
+    }
     
     // Convert tools from Vowel format to OpenAI format if needed
     // This ensures optional parameters are properly represented in the schema

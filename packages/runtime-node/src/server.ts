@@ -23,12 +23,40 @@ import { generateEventId, generateSessionId } from '../../../src/lib/protocol';
 import { buildSessionConfig } from '../../../src/session/bootstrap';
 import { isAudioChunkMessage } from '../../../src/session/message-utils';
 import { ProviderFactory } from '../../../src/services/providers/ProviderFactory';
+import { ProviderRegistry } from '../../../src/services/providers/ProviderRegistry';
+import { registerOSSProviders } from '../../../src/services/providers/OSSProviderRegistration';
+import { SileroVADConfig } from '../../../src/config/providers';
+import { SileroVADProvider } from '../../../packages/provider-silero-vad/src';
 
 type RuntimeWebSocket = WebSocket & {
   data: SessionData;
   runtimeConfig?: NodeRuntimeConfig;
 };
 
+function registerNodeProviders(): void {
+  registerOSSProviders();
+
+  if (ProviderRegistry.getVADProvider('silero')) {
+    return;
+  }
+
+  ProviderRegistry.registerVAD({
+    name: 'silero',
+    category: 'vad',
+    capabilities: {
+      supportsStreaming: false,
+      supportsVAD: true,
+      supportsLanguageDetection: false,
+      supportsMultipleVoices: false,
+      requiresNetwork: false,
+      supportsGPU: true,
+    },
+    configSchema: SileroVADConfig,
+    factory: (config) => new SileroVADProvider(config),
+  });
+}
+
+registerNodeProviders();
 const configLoader = new NodeConfigLoader();
 const runtimeConfig: NodeRuntimeConfig = configLoader.load();
 const serverConfig = runtimeConfig.server ?? { port: 3001, env: 'development' };

@@ -47,6 +47,10 @@ export function mergeR2ConfigIntoEnv(env: EnvLike, config: EngineConfig): EnvLik
       'OPENROUTER_API_KEY',
       'CEREBRAS_API_KEY',
       'DEEPGRAM_API_KEY',
+      'ASSEMBLYAI_API_KEY',
+      'MODULATE_API_KEY',
+      'INWORLD_API_KEY',
+      'FENNEC_API_KEY',
       'POLAR_API_KEY',
       'POSTHOG_API_KEY',
     ];
