@@ -11,11 +11,15 @@ import { GroqWhisperSTT } from '../../../packages/provider-groq-whisper-stt/src'
 import { MistralVoxtralRealtimeSTT } from '../../../packages/provider-mistral-voxtral-realtime-stt/src';
 import { DeepgramSTT } from '../../../packages/provider-deepgram-stt/src';
 import { DeepgramTTS } from '../../../packages/provider-deepgram-tts/src';
+import { OpenAICompatibleSTT } from './OpenAICompatibleSTT';
+import { OpenAICompatibleTTS } from './OpenAICompatibleTTS';
 import {
   GroqWhisperConfig,
   MistralVoxtralRealtimeConfig,
   DeepgramSTTConfig,
   DeepgramTTSConfig,
+  OpenAICompatibleSTTConfig,
+  OpenAICompatibleTTSConfig,
 } from '../../config/providers';
 
 // ── Registration ────────────────────────────────────────────────────────────
@@ -89,6 +93,23 @@ export function registerOSSProviders(): void {
     },
   });
 
+  ProviderRegistry.registerSTT({
+    name: 'openai-compatible',
+    category: 'stt',
+    capabilities: {
+      supportsStreaming: false,
+      supportsVAD: false,
+      supportsLanguageDetection: true,
+      supportsMultipleVoices: false,
+      requiresNetwork: true,
+      supportsGPU: false,
+    },
+    configSchema: OpenAICompatibleSTTConfig,
+    factory: (config) => {
+      return new OpenAICompatibleSTT(config);
+    },
+  });
+
   // TTS Providers
   ProviderRegistry.registerTTS({
     name: 'deepgram',
@@ -114,6 +135,23 @@ export function registerOSSProviders(): void {
         sampleRate: config.sampleRate,
         encoding: config.encoding,
       });
+    },
+  });
+
+  ProviderRegistry.registerTTS({
+    name: 'openai-compatible',
+    category: 'tts',
+    capabilities: {
+      supportsStreaming: false,
+      supportsVAD: false,
+      supportsLanguageDetection: false,
+      supportsMultipleVoices: true,
+      requiresNetwork: true,
+      supportsGPU: false,
+    },
+    configSchema: OpenAICompatibleTTSConfig,
+    factory: (config) => {
+      return new OpenAICompatibleTTS(config);
     },
   });
 

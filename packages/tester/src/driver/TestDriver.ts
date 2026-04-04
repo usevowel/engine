@@ -47,6 +47,7 @@ export interface DriverResponse {
 export class TestDriver {
   private config: TestDriverConfig;
   private state: ConversationState;
+  private readonly maxDriverRetries = 8;
 
   constructor(config: TestDriverConfig) {
     this.config = {
@@ -93,7 +94,7 @@ export class TestDriver {
     const prompt = this.buildPrompt();
     
     try {
-      const model =
+      const model: any =
         this.config.provider === 'openrouter'
           ? createOpenRouter({
               apiKey: process.env.OPENROUTER_API_KEY || '',
@@ -108,10 +109,12 @@ export class TestDriver {
             })(this.config.model!)
           : groq(this.config.model!);
 
-      const { text } = await generateText({
-        model,
-        temperature: this.config.temperature,
-        prompt,
+      const { text } = await this.generateWithRetry(async () => {
+        return await generateText({
+          model,
+          temperature: this.config.temperature,
+          prompt,
+        });
       });
 
       const parsed = this.parseResponse(text);
@@ -131,6 +134,30 @@ export class TestDriver {
         evaluation: `Error: ${error}`,
       };
     }
+  }
+
+  private async generateWithRetry<T>(operation: () => Promise<T>): Promise<T> {
+    let lastError: unknown;
+
+    for (let attempt = 1; attempt <= this.maxDriverRetries; attempt += 1) {
+      try {
+        return await operation();
+      } catch (error) {
+        lastError = error;
+        const message = String(error);
+        const isRetryable = message.includes('429') || message.toLowerCase().includes('rate-limit') || message.toLowerCase().includes('rate limit');
+
+        if (!isRetryable || attempt === this.maxDriverRetries) {
+          throw error;
+        }
+
+        const delayMs = Math.min(2000 * 2 ** (attempt - 1), 15000);
+        console.warn(`TestDriver retry ${attempt}/${this.maxDriverRetries} after ${delayMs}ms: ${message}`);
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+      }
+    }
+
+    throw lastError;
   }
 
   private buildPrompt(): string {

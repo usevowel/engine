@@ -154,11 +154,9 @@ export async function executeAskSubagent(
       sessionData.model ||
       (provider === 'openrouter'
         ? 'anthropic/claude-3-5-sonnet'
-        : provider === 'cerebras'
-          ? 'llama-3.3-70b'
-          : provider === 'workers-ai'
-            ? '@cf/zai-org/glm-4.7-flash'
-            : 'moonshotai/kimi-k2-instruct-0905');
+        : provider === 'openai-compatible'
+          ? 'lfm2.5-1.2b-instruct'
+          : 'moonshotai/kimi-k2-instruct-0905');
     const apiKey = sessionData.runtimeConfig?.llm.apiKey || '';
     
     if (!apiKey) {
@@ -168,6 +166,7 @@ export async function executeAskSubagent(
     // Get provider client
     const llmClient = getProvider(provider, {
       apiKey,
+      baseUrl: sessionData.runtimeConfig?.llm.baseUrl,
       openrouterSiteUrl: sessionData.runtimeConfig?.llm.openrouterSiteUrl,
       openrouterAppName: sessionData.runtimeConfig?.llm.openrouterAppName,
     });

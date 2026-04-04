@@ -75,6 +75,9 @@ export async function generateResponse(ws: ServerWebSocket<SessionData>, options
   const data = ws.data;
   const responseId = generateResponseId();
   data.currentResponseId = responseId;
+
+  const ttsConfig = data.runtimeConfig?.providers?.tts?.config as Record<string, unknown> | undefined;
+  const providerDefaultVoice = typeof ttsConfig?.voice === 'string' ? ttsConfig.voice : undefined;
   
   // Initialize response filter service (enabled by default)
   // This replaces the old algorithmic TextDeduplicator with AI-driven filtering
@@ -122,7 +125,7 @@ export async function generateResponse(ws: ServerWebSocket<SessionData>, options
   
   // Get configuration (needed before acknowledgement service)
   // Get base voice from options or session config
-  const baseVoice = options?.voice || data.config.voice || 'Ashley';
+  const baseVoice = options?.voice || data.config.voice || providerDefaultVoice || 'Ashley';
   
   // Dynamically select voice based on current language, maintaining gender preference
   const currentLanguage = data.language?.current || 
@@ -1730,9 +1733,11 @@ export async function generateResponse(ws: ServerWebSocket<SessionData>, options
     const errorAnalysis = detectFatalLLMError(error);
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     
-    // Check for Inworld TTS structured error (special case)
+    // Check for provider-specific TTS structured errors (special cases)
     const isInworldError = error instanceof Error && error.name === 'InworldTTSError';
     const inworldErrorDetails = isInworldError ? (error as any).details : null;
+    const isOpenAICompatibleTTSError = error instanceof Error && error.name === 'OpenAICompatibleTTSError';
+    const openAICompatibleErrorDetails = isOpenAICompatibleTTSError ? (error as any).details : null;
     
     // Log API key errors prominently (in addition to fatal error detection)
     if (errorMessage.toLowerCase().includes('api key') || 
@@ -1857,6 +1862,30 @@ export async function generateResponse(ws: ServerWebSocket<SessionData>, options
       // Close WebSocket with error code
       getEventSystem().error(EventCategory.SESSION, `🔌 Closing WebSocket due to TTS error (code: 1011): ${inworldErrorDetails.message}`);
       ws.close(1011, `Inworld TTS error: ${inworldErrorDetails.message}`);
+    } else if (isOpenAICompatibleTTSError && openAICompatibleErrorDetails) {
+      getEventSystem().error(EventCategory.TTS, '⚠️ OpenAI-compatible TTS error - sending structured error');
+
+      sendStructuredError(
+        ws,
+        'invalid_request_error',
+        openAICompatibleErrorDetails.message,
+        openAICompatibleErrorDetails.code,
+        openAICompatibleErrorDetails.param
+      );
+
+      ws.send(JSON.stringify({
+        type: 'response.done',
+        event_id: generateEventId(),
+        response: {
+          id: responseId,
+          object: 'realtime.response',
+          status: 'failed',
+          output: [],
+        },
+      }));
+
+      getEventSystem().error(EventCategory.SESSION, `🔌 Closing WebSocket due to OpenAI-compatible TTS error (code: 1011): ${openAICompatibleErrorDetails.message}`);
+      ws.close(1011, `OpenAI-compatible TTS error: ${openAICompatibleErrorDetails.message}`);
     } else {
       // Fatal error (default): Send error and close WebSocket
       // This catches all errors not explicitly whitelisted as recoverable

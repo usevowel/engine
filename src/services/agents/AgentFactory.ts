@@ -17,6 +17,8 @@
 import { ILLMAgent, AgentConfig } from './ILLMAgent';
 import { VercelSDKAgent } from './VercelSDKAgent';
 import { CustomAgent } from './CustomAgent';
+import { InlineToolParsingAgent } from './InlineToolParsingAgent';
+import { resolveModelDirective } from '../../models';
 
 import { getEventSystem, EventCategory } from '../../events';
 /**
@@ -76,6 +78,15 @@ export class AgentFactory {
     
     // Apply defaults
     const configWithDefaults = this.applyDefaults(config);
+    const modelDirective = resolveModelDirective(configWithDefaults);
+
+    if (modelDirective.toolCallStrategy === 'inline-parser') {
+      getEventSystem().info(
+        EventCategory.LLM,
+        `🏭 [AgentFactory] Routing ${configWithDefaults.model} to InlineToolParsingAgent via ${modelDirective.id} directive`,
+      );
+      return new InlineToolParsingAgent(configWithDefaults);
+    }
     
     // Create agent based on type
     const agentType = configWithDefaults.agentType || 'vercel-sdk';
@@ -107,7 +118,7 @@ export class AgentFactory {
       throw new Error('AgentConfig.provider is required');
     }
     
-    if (config.provider !== 'workers-ai' && !config.apiKey) {
+    if (!config.apiKey) {
       throw new Error('AgentConfig.apiKey is required');
     }
     
@@ -146,7 +157,17 @@ export class AgentFactory {
    * @param config - Agent configuration
    * @returns Configuration with defaults applied
    */
-  private static applyDefaults(config: AgentConfig): Required<Omit<AgentConfig, 'openrouterSiteUrl' | 'openrouterAppName' | 'summarizationConfig' | 'sessionId' | 'maxStreamRetries'>> & {
+  private static applyDefaults(config: AgentConfig): Omit<AgentConfig, 'baseUrl' | 'openrouterSiteUrl' | 'openrouterAppName' | 'summarizationConfig' | 'sessionId' | 'maxStreamRetries'> & {
+    agentType: string;
+    provider: string;
+    apiKey: string;
+    model: string;
+    systemPrompt: AgentConfig['systemPrompt'];
+    maxSteps: number;
+    maxContextMessages: number;
+    maxContextTokens: number;
+    minContextTokens: number;
+    baseUrl?: string;
     openrouterSiteUrl?: string;
     openrouterAppName?: string;
     summarizationConfig?: AgentConfig['summarizationConfig'];
@@ -157,16 +178,20 @@ export class AgentFactory {
       agentType: config.agentType || 'vercel-sdk',
       provider: config.provider,
       apiKey: config.apiKey,
+      baseUrl: config.baseUrl,
       model: config.model,
       systemPrompt: config.systemPrompt,
       maxSteps: config.maxSteps ?? 15,
       maxContextMessages: config.maxContextMessages ?? 15,
+      maxContextTokens: config.maxContextTokens ?? 72000,
+      minContextTokens: config.minContextTokens ?? 32000,
       contextStrategy: config.contextStrategy || 'message-count',
       openrouterSiteUrl: config.openrouterSiteUrl,
       openrouterAppName: config.openrouterAppName,
       summarizationConfig: config.summarizationConfig,
       sessionId: config.sessionId,
       maxStreamRetries: config.maxStreamRetries,
+      groqReasoningEffort: config.groqReasoningEffort,
     };
   }
   
@@ -202,4 +227,3 @@ export class AgentFactory {
     return this.getSupportedTypes().includes(agentType);
   }
 }
-

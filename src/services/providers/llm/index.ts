@@ -14,10 +14,8 @@ export {
   getProvider,
   getProviderNames,
   isValidProvider,
-  registerWorkersAIBinding,
   type SupportedProvider,
   type ProviderConfig,
-  type WorkersAIBinding,
 } from './provider-registry';
 
 // Reasoning effort utilities

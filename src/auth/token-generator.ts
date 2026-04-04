@@ -15,7 +15,7 @@ import { getEventSystem, EventCategory } from '../events';
  * LLM Provider Configuration
  */
 export interface LLMProviderConfig {
-  llmProvider?: 'groq' | 'openrouter' | 'cerebras' | 'workers-ai';
+  llmProvider?: 'groq' | 'openrouter' | 'openai-compatible';
   openrouterProvider?: string;
   openrouterSiteUrl?: string;
   openrouterAppName?: string;
@@ -130,7 +130,7 @@ export interface TokenGenerationOptions {
   maxIdleDurationMs?: number;
   
   /** LLM provider configuration */
-  llmProvider?: 'groq' | 'openrouter' | 'cerebras' | 'workers-ai';
+  llmProvider?: 'groq' | 'openrouter' | 'openai-compatible';
   openrouterProvider?: string;
   openrouterSiteUrl?: string;
   openrouterAppName?: string;
@@ -175,7 +175,7 @@ export interface TokenPayload {
   maxIdleDurationMs?: number;
   
   // LLM Provider Configuration
-  llmProvider?: 'groq' | 'openrouter' | 'cerebras' | 'workers-ai';
+  llmProvider?: 'groq' | 'openrouter' | 'openai-compatible';
   openrouterProvider?: string;
   openrouterSiteUrl?: string;
   openrouterAppName?: string;

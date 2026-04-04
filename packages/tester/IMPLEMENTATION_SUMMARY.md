@@ -22,7 +22,7 @@
 
 3. **Fixed Issues**
    - Server configuration (switched from OpenRouter to Groq)
-   - Removed duplicate `response.create` (server auto-triggers for user messages)
+   - Removed duplicate `response.create` for user-message submission while keeping tool-result continuation explicit
    - Added `initial_greeting_prompt: null` to prevent auto-greeting
    - Implemented text-based tool call parsing (server outputs tool calls as text with special tokens)
 

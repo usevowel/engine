@@ -15,6 +15,7 @@ import { convertVowelToolsToOpenAIFormat } from '../../lib/vowel-to-openai-schem
 import type { SessionData } from '../types';
 import { initializeAgent } from '../agent-init';
 import { SessionManager } from '../SessionManager';
+import { resolveOpenAICompatibleModel } from '../../services/providers/llm/openai-compatible-models';
 
 import { getEventSystem, EventCategory } from '../../events';
 
@@ -77,16 +78,56 @@ export async function handleSessionUpdate(ws: ServerWebSocket<SessionData>, even
   
   // Update session config
   if (event.session) {
-    // Update model if provided (allow runtime model switching)
-    // Client-provided model ALWAYS takes precedence over token/default
+    if (data.runtimeConfig?.llm.provider === 'openai-compatible') {
+      const requestedModel = event.session.model || data.model || data.runtimeConfig.llm.model;
+      const resolvedModel = await resolveOpenAICompatibleModel(
+        data.runtimeConfig.llm.baseUrl,
+        data.runtimeConfig.llm.apiKey,
+        requestedModel,
+      );
+
+      if (resolvedModel !== data.model) {
+        getEventSystem().info(EventCategory.SESSION, `🔄 OpenAI-compatible model resolved: ${data.model} → ${resolvedModel}`);
+        data.model = resolvedModel;
+      }
+
+      data.runtimeConfig.llm.model = resolvedModel;
+      if (event.session.model && event.session.model !== resolvedModel) {
+        getEventSystem().warn(
+          EventCategory.SESSION,
+          `⚠️  Replacing client/open-config model ${event.session.model} with discovered openai-compatible model ${resolvedModel}`
+        );
+      }
+      event.session.model = resolvedModel;
+    }
+
+    // Update model if provided.
+    // For self-hosted openai-compatible backends, keep the server-configured model pinned.
+    // Many clients send their own default model (for example openai/gpt-oss-20b) in
+    // session.update even when the backend is intentionally configured for a local model.
+    // Letting that overwrite the runtime config breaks local vLLM/LFM setups.
     if (event.session.model) {
-      const newModel = validateModel(event.session.model);
-      if (newModel !== data.model) {
-        getEventSystem().info(EventCategory.SESSION, `🔄 Model changed: ${data.model} → ${newModel}`);
-        getEventSystem().info(EventCategory.SESSION, `   ✅ Now using client-specified model: ${newModel}`);
-        data.model = newModel;
+      const configuredProvider = data.runtimeConfig?.llm.provider;
+      const configuredModel = data.runtimeConfig?.llm.model;
+
+      if (configuredProvider === 'openai-compatible' && configuredModel) {
+        if (event.session.model !== configuredModel) {
+          getEventSystem().warn(
+            EventCategory.SESSION,
+            `⚠️  Ignoring client model override for openai-compatible session: ${event.session.model} (keeping ${configuredModel})`
+          );
+        } else {
+          getEventSystem().info(EventCategory.SESSION, `   ℹ️  Model already set to configured openai-compatible model: ${configuredModel}`);
+        }
       } else {
-        getEventSystem().info(EventCategory.SESSION, `   ℹ️  Model already set to: ${data.model}`);
+        const newModel = validateModel(event.session.model);
+        if (newModel !== data.model) {
+          getEventSystem().info(EventCategory.SESSION, `🔄 Model changed: ${data.model} → ${newModel}`);
+          getEventSystem().info(EventCategory.SESSION, `   ✅ Now using client-specified model: ${newModel}`);
+          data.model = newModel;
+        } else {
+          getEventSystem().info(EventCategory.SESSION, `   ℹ️  Model already set to: ${data.model}`);
+        }
       }
     }
     
@@ -158,7 +199,11 @@ export async function handleSessionUpdate(ws: ServerWebSocket<SessionData>, even
           threshold: 0.5,
           silence_duration_ms: 550,
           prefix_padding_ms: 0,
-          create_response: false, // We handle response creation manually
+          // For engine-managed VAD, speech end should normally advance the
+          // conversation automatically. Clients can still override this to
+          // false if they want transcript-only turns and will send
+          // `response.create` themselves.
+          create_response: true,
           interrupt_response: true, // ALWAYS enable interrupts
         };
     
@@ -346,6 +391,7 @@ export async function handleSessionUpdate(ws: ServerWebSocket<SessionData>, even
         agentType,
         provider,
         apiKey: data.runtimeConfig!.llm.apiKey,
+        baseUrl: data.runtimeConfig!.llm.baseUrl,
         model: data.model,
         systemPrompt: buildSystemPrompt(data.config.instructions, agentType, undefined, data.language?.current || data.language?.detected || null),
         maxSteps,
@@ -365,7 +411,7 @@ export async function handleSessionUpdate(ws: ServerWebSocket<SessionData>, even
       const posthogSessionId = data.sessionKey || data.sessionId;
       
       data.agent = new SoundbirdAgent({
-        provider,
+        provider: provider as any,
         apiKey: data.runtimeConfig!.llm.apiKey,
         model: data.model,
         systemPrompt: buildSystemPrompt(data.config.instructions, undefined, undefined, data.language?.current || data.language?.detected || null),

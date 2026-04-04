@@ -70,6 +70,7 @@ export function initializeAgent(sessionData: SessionData, runtimeConfig: Runtime
       agentType,
       provider,
       apiKey,
+      baseUrl: runtimeConfig.llm.baseUrl,
       model: sessionData.model,
       systemPrompt: systemPromptGenerator,
       maxSteps,
@@ -90,7 +91,7 @@ export function initializeAgent(sessionData: SessionData, runtimeConfig: Runtime
     const posthogSessionId = sessionData.sessionKey || sessionData.sessionId;
 
     sessionData.agent = new SoundbirdAgent({
-      provider,
+      provider: provider as any,
       apiKey: runtimeConfig.llm.apiKey,
       model: sessionData.model,
       systemPrompt: buildSystemPrompt(

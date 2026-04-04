@@ -26,6 +26,9 @@ export interface AgentConfig {
   
   /** API key for the provider */
   apiKey: string;
+
+  /** Optional base URL for OpenAI-compatible or self-hosted providers */
+  baseUrl?: string;
   
   /** Model identifier */
   model: string;
@@ -360,5 +363,4 @@ export interface ILLMAgent {
    */
   cleanup(): Promise<void>;
 }
-
 

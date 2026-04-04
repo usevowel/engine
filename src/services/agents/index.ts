@@ -33,3 +33,4 @@ export { AgentFactory } from './AgentFactory';
 // Agent implementations
 export { VercelSDKAgent } from './VercelSDKAgent';
 export { CustomAgent } from './CustomAgent';
+export { InlineToolParsingAgent } from './InlineToolParsingAgent';

@@ -711,8 +711,13 @@ export async function handleAudioCommit(ws: ServerWebSocket<SessionData>, event:
     // Send transcription completed (use cleaned transcript)
     sendTranscriptionCompleted(ws, itemId, 0, cleanedTranscript);
     
-    // Automatically trigger response
-    await generateResponse(ws);
+    // `create_response: false` means the client wants transcription/turn commit
+    // without automatically starting the assistant response.
+    if (data.config.turn_detection?.create_response !== false) {
+      await generateResponse(ws);
+    } else {
+      getEventSystem().info(EventCategory.STT, '⏭️ Skipping automatic response generation because turn_detection.create_response is false');
+    }
     
   } catch (error) {
     getEventSystem().error(EventCategory.STT, '❌ Transcription error:', error instanceof Error ? error : new Error(String(error)));

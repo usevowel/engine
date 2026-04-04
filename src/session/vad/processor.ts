@@ -104,8 +104,10 @@ export async function processVAD(
         
         sendSpeechStopped(ws, timestampMs);
         
-        // Auto-commit when speech ends (if create_response is enabled)
-        if (ws.data.config.turn_detection?.create_response !== false && onSpeechEnd) {
+        // Always commit buffered audio on speech end for server VAD.
+        // `create_response` controls whether we auto-generate the assistant turn,
+        // not whether we perform transcription.
+        if (onSpeechEnd) {
           await onSpeechEnd();
         }
       }
@@ -116,7 +118,11 @@ export async function processVAD(
       getEventSystem().warn(EventCategory.AUDIO, `⚠️  No VAD chunks processed (resampled length: ${resampled.length}, need: ${chunkSize})`);
     }
   } catch (error) {
-    getEventSystem().error(EventCategory.VAD, '❌ VAD processing error:', error);
+    getEventSystem().error(
+      EventCategory.VAD,
+      '❌ VAD processing error:',
+      error instanceof Error ? error : new Error(String(error))
+    );
     // Don't send error to client, just log it
   }
 }

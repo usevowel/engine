@@ -50,9 +50,10 @@ export interface RuntimeConfig {
   
   // LLM Configuration
   llm: {
-    provider: 'groq' | 'openrouter' | 'cerebras' | 'workers-ai';
+    provider: 'groq' | 'openrouter' | 'openai-compatible';
     apiKey: string;
     model: string;
+    baseUrl?: string;
     openrouterSiteUrl?: string;
     openrouterAppName?: string;
     openrouterProvider?: string;
@@ -96,7 +97,7 @@ export interface RuntimeConfig {
   // Turn Detection Configuration (LLM-based)
   turnDetection?: {
     enabled: boolean;
-    llmProvider: 'groq' | 'openrouter' | 'cerebras';
+    llmProvider: 'groq' | 'openrouter';
     llmModel: string;
     llmApiKey?: string;
     debounceMs: number;
@@ -122,7 +123,7 @@ export interface RuntimeConfig {
   subagent?: {
     enabled: boolean;
     model?: string;
-    provider?: 'groq' | 'openrouter' | 'cerebras' | 'workers-ai';
+    provider?: 'groq' | 'openrouter' | 'openai-compatible';
     temperature?: number;
     maxTokens?: number;
   };
@@ -160,7 +161,7 @@ export function validateConfig(config: RuntimeConfig): void {
   }
   
   // Skip API key validation in test mode
-  if (!config.testMode && config.llm.provider !== 'workers-ai' && !config.llm.apiKey) {
+  if (!config.testMode && !config.llm.apiKey) {
     throw new Error('LLM API key is required (or enable test mode)');
   }
   

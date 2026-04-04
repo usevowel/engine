@@ -41,6 +41,16 @@ function buildSTTConfigFromEnv(provider: string): unknown {
           ? parseInt(env.DEEPGRAM_STT_SAMPLE_RATE, 10)
           : 16000,
       };
+    case 'openai-compatible':
+      return {
+        apiKey: env.ECHOLINE_API_KEY || '',
+        baseUrl: env.ECHOLINE_BASE_URL || 'http://localhost:8000/v1',
+        model: env.ECHOLINE_STT_MODEL || 'Systran/faster-whisper-tiny',
+        language: env.ECHOLINE_STT_LANGUAGE,
+        sampleRate: env.ECHOLINE_STT_SAMPLE_RATE
+          ? parseInt(env.ECHOLINE_STT_SAMPLE_RATE, 10)
+          : 24000,
+      };
     default:
       return {};
   }
@@ -57,6 +67,17 @@ function buildTTSConfigFromEnv(provider: string): unknown {
           ? parseInt(env.DEEPGRAM_TTS_SAMPLE_RATE, 10)
           : 24000,
         encoding: env.DEEPGRAM_TTS_ENCODING || 'linear16',
+      };
+    case 'openai-compatible':
+      return {
+        apiKey: env.ECHOLINE_API_KEY || '',
+        baseUrl: env.ECHOLINE_BASE_URL || 'http://localhost:8000/v1',
+        model: env.ECHOLINE_TTS_MODEL || 'onnx-community/Kokoro-82M-v1.0-ONNX',
+        voice: env.ECHOLINE_TTS_VOICE || 'af_heart',
+        sampleRate: env.ECHOLINE_TTS_SAMPLE_RATE
+          ? parseInt(env.ECHOLINE_TTS_SAMPLE_RATE, 10)
+          : 24000,
+        responseFormat: (env.ECHOLINE_TTS_RESPONSE_FORMAT || 'wav') as 'wav' | 'mp3',
       };
     default:
       return {};
@@ -87,22 +108,18 @@ function buildVADConfigFromEnv(provider: string): unknown {
 export class NodeConfigLoader {
   load(): NodeRuntimeConfig {
     const env = process.env;
-    const llmProvider = (env.LLM_PROVIDER || 'groq') as 'groq' | 'openrouter' | 'cerebras' | 'workers-ai';
+    const llmProvider = (env.LLM_PROVIDER || 'groq') as 'groq' | 'openrouter' | 'openai-compatible';
     const llmApiKey =
       llmProvider === 'openrouter'
         ? env.OPENROUTER_API_KEY || ''
-        : llmProvider === 'cerebras'
-          ? env.CEREBRAS_API_KEY || ''
-          : llmProvider === 'workers-ai'
-            ? ''
+        : llmProvider === 'openai-compatible'
+            ? env.OPENAI_COMPATIBLE_API_KEY || 'EMPTY'
           : env.GROQ_API_KEY || '';
     const llmModel =
       llmProvider === 'openrouter'
         ? env.OPENROUTER_MODEL || env.GROQ_MODEL || 'openai/gpt-oss-20b'
-        : llmProvider === 'cerebras'
-          ? env.CEREBRAS_MODEL || env.GROQ_MODEL || 'openai/gpt-oss-20b'
-          : llmProvider === 'workers-ai'
-            ? env.WORKERS_AI_MODEL || '@cf/zai-org/glm-4.7-flash'
+        : llmProvider === 'openai-compatible'
+            ? env.OPENAI_COMPATIBLE_MODEL || 'lfm2.5-1.2b-instruct'
           : env.GROQ_MODEL || 'openai/gpt-oss-20b';
 
     const sttProvider = env.STT_PROVIDER || 'groq-whisper';
@@ -117,6 +134,7 @@ export class NodeConfigLoader {
         provider: llmProvider,
         model: llmModel,
         apiKey: llmApiKey,
+        baseUrl: env.OPENAI_COMPATIBLE_BASE_URL,
         openrouterSiteUrl: env.OPENROUTER_SITE_URL,
         openrouterAppName: env.OPENROUTER_APP_NAME,
         openrouterProvider: env.OPENROUTER_PROVIDER,
@@ -167,10 +185,7 @@ export class NodeConfigLoader {
 
       turnDetection: {
         enabled: env.TURN_DETECTION_ENABLED !== 'false',
-        llmProvider: (
-          env.TURN_DETECTION_LLM_PROVIDER ||
-          (llmProvider === 'workers-ai' ? 'groq' : llmProvider)
-        ) as 'groq' | 'openrouter' | 'cerebras',
+        llmProvider: (env.TURN_DETECTION_LLM_PROVIDER || llmProvider) as 'groq' | 'openrouter',
         llmModel: env.TURN_DETECTION_LLM_MODEL || env.GROQ_MODEL || 'llama-3.1-8b-instant',
         llmApiKey: env.TURN_DETECTION_LLM_API_KEY,
         debounceMs: parseInt(env.TURN_DETECTION_DEBOUNCE_MS || '150', 10),
@@ -192,7 +207,7 @@ export class NodeConfigLoader {
       subagent: {
         enabled: env.SUBAGENT_ENABLED === 'true',
         model: env.SUBAGENT_MODEL,
-        provider: env.SUBAGENT_PROVIDER as 'groq' | 'openrouter' | 'cerebras' | 'workers-ai' | undefined,
+        provider: env.SUBAGENT_PROVIDER as 'groq' | 'openrouter' | 'openai-compatible' | undefined,
         temperature: env.SUBAGENT_TEMPERATURE ? parseFloat(env.SUBAGENT_TEMPERATURE) : undefined,
         maxTokens: env.SUBAGENT_MAX_TOKENS ? parseInt(env.SUBAGENT_MAX_TOKENS, 10) : undefined,
       },

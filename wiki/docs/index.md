@@ -72,6 +72,8 @@ Server runs at `http://localhost:8787`.
 
 - [Speech-to-Text](/providers/stt) - Groq Whisper
 - [Text-to-Speech](/providers/tts) - Modular TTS system
+- [OpenAI-Compatible Audio](/providers/openai-compatible) - Generic batch STT/TTS provider for OpenAI-style endpoints
+- [Echoline](/providers/echoline) - Echoline backend notes, including experimental realtime STT
 - [LLM](/providers/llm) - Groq, OpenRouter, and models
 - [Voice Activity Detection](/providers/vad) - VAD configuration
 

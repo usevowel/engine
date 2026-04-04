@@ -1,7 +1,7 @@
 /**
  * LLM Service
  * 
- * Integrates with Groq GPT-OSS 120B and OpenRouter via Vercel AI SDK.
+ * Integrates with Groq, OpenRouter, and OpenAI-compatible endpoints via Vercel AI SDK.
  * 
  * NOW RUNTIME-AGNOSTIC: Creates LLM client with provided API key and provider.
  */
@@ -69,11 +69,9 @@ export async function* streamLLMResponse(
     apiKey,
     model = provider === 'openrouter'
       ? 'anthropic/claude-3-5-sonnet'
-      : provider === 'cerebras'
-        ? 'llama-3.3-70b'
-        : provider === 'workers-ai'
-          ? '@cf/zai-org/glm-4.7-flash'
-          : 'moonshotai/kimi-k2-instruct-0905',
+      : provider === 'openai-compatible'
+        ? 'lfm2.5-1.2b-instruct'
+        : 'moonshotai/kimi-k2-instruct-0905',
     instructions,
     temperature,
     maxTokens,
@@ -86,6 +84,7 @@ export async function* streamLLMResponse(
   // Get provider from registry (replaces manual if/else logic)
   const llmClient = getProvider(provider, {
     apiKey,
+    baseUrl: (options as LLMStreamOptions & { baseUrl?: string }).baseUrl,
     openrouterSiteUrl,
     openrouterAppName,
   });

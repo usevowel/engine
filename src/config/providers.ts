@@ -39,6 +39,23 @@ export const DeepgramTTSConfig = z.object({
   encoding: z.string().default('linear16'),
 });
 
+export const OpenAICompatibleSTTConfig = z.object({
+  apiKey: z.string().optional(),
+  baseUrl: z.string().url().default('http://localhost:8000/v1'),
+  model: z.string().default('Systran/faster-whisper-tiny'),
+  language: z.string().optional(),
+  sampleRate: z.number().default(24000),
+});
+
+export const OpenAICompatibleTTSConfig = z.object({
+  apiKey: z.string().optional(),
+  baseUrl: z.string().url().default('http://localhost:8000/v1'),
+  model: z.string().default('onnx-community/Kokoro-82M-v1.0-ONNX'),
+  voice: z.string().default('af_heart'),
+  sampleRate: z.number().default(24000),
+  responseFormat: z.enum(['wav', 'mp3']).default('wav'),
+});
+
 export const SileroVADConfig = z.object({
   threshold: z.number().min(0).max(1).default(0.5),
   minSilenceDurationMs: z.number().default(550),

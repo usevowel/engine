@@ -33,8 +33,8 @@ if (isBun) {
   if (!isTestMode) {
     if (llmProvider === 'openrouter') {
       requiredEnvVars.push('OPENROUTER_API_KEY');
-    } else if (llmProvider === 'workers-ai') {
-      // Cloudflare Workers AI uses the `AI` binding instead of an API key.
+    } else if (llmProvider === 'openai-compatible') {
+      requiredEnvVars.push('OPENAI_COMPATIBLE_API_KEY');
     } else {
       requiredEnvVars.push('GROQ_API_KEY');
     }
@@ -44,7 +44,7 @@ if (isBun) {
     if (!Bun.env[envVar]) {
       getEventSystem().error(EventCategory.SYSTEM, `❌ Missing required environment variable: ${envVar}`);
       getEventSystem().error(EventCategory.SYSTEM, 'Please check your .env file and ensure all required variables are set.');
-      if (isTestMode && (envVar === 'GROQ_API_KEY' || envVar === 'OPENROUTER_API_KEY')) {
+      if (isTestMode && (envVar === 'GROQ_API_KEY' || envVar === 'OPENROUTER_API_KEY' || envVar === 'OPENAI_COMPATIBLE_API_KEY')) {
         getEventSystem().info(EventCategory.SYSTEM, '   ℹ️  Note: TEST_MODE is enabled, but API key is still required for some operations');
       }
       process.exit(1);
@@ -87,7 +87,7 @@ export const config = {
   
   // LLM Provider
   llm: {
-    provider: (getEnv('LLM_PROVIDER') || 'groq') as 'groq' | 'openrouter' | 'cerebras' | 'workers-ai',
+    provider: (getEnv('LLM_PROVIDER') || 'groq') as 'groq' | 'openrouter' | 'openai-compatible',
   },
 
   // Groq API
@@ -116,15 +116,11 @@ export const config = {
     // OpenRouter-specific provider selection (e.g., 'anthropic', 'openai', 'google')
     provider: getEnv('OPENROUTER_PROVIDER'),
   },
-  
-  // Cerebras API
-  cerebras: {
-    apiKey: getEnv('CEREBRAS_API_KEY') || '',
-    model: getEnv('CEREBRAS_MODEL') || 'llama-3.3-70b',
-  },
 
-  workersAI: {
-    model: getEnv('WORKERS_AI_MODEL') || '@cf/zai-org/glm-4.7-flash',
+  openaiCompatible: {
+    apiKey: getEnv('OPENAI_COMPATIBLE_API_KEY') || 'EMPTY',
+    baseUrl: getEnv('OPENAI_COMPATIBLE_BASE_URL') || 'http://127.0.0.1:8067/v1',
+    model: getEnv('OPENAI_COMPATIBLE_MODEL') || 'lfm2.5-1.2b-instruct',
   },
   
   // Test Mode (disables external metering integrations)
@@ -177,7 +173,7 @@ export const config = {
   // Turn Detection (LLM-based)
   turnDetection: {
     enabled: getEnv('TURN_DETECTION_ENABLED') !== 'false', // Default enabled
-    llmProvider: (getEnv('TURN_DETECTION_LLM_PROVIDER') || 'groq') as 'groq' | 'openrouter' | 'cerebras',
+    llmProvider: (getEnv('TURN_DETECTION_LLM_PROVIDER') || 'groq') as 'groq' | 'openrouter',
     llmModel: getEnv('TURN_DETECTION_LLM_MODEL') || 'llama-3.1-8b-instant',
     llmApiKey: getEnv('TURN_DETECTION_LLM_API_KEY'), // Optional, falls back to GROQ_API_KEY, OPENROUTER_API_KEY, or CEREBRAS_API_KEY
     debounceMs: parseInt(getEnv('TURN_DETECTION_DEBOUNCE_MS') || '150', 10),
@@ -523,7 +519,7 @@ export function buildSystemPrompt(
 export interface SubagentConfig {
   enabled: boolean;
   model?: string;
-  provider?: 'groq' | 'openrouter' | 'cerebras' | 'workers-ai';
+  provider?: 'groq' | 'openrouter' | 'openai-compatible';
   temperature?: number;
   maxTokens?: number;
 }
@@ -568,7 +564,7 @@ export function getSubagentConfig(runtimeConfig?: import('./RuntimeConfig').Runt
     model: runtimeConfig?.subagent?.model ?? 
            (getEnv('SUBAGENT_MODEL') || undefined),
     provider: runtimeConfig?.subagent?.provider ?? 
-              (getEnv('SUBAGENT_PROVIDER') as 'groq' | 'openrouter' | 'cerebras' | 'workers-ai' | undefined),
+              (getEnv('SUBAGENT_PROVIDER') as 'groq' | 'openrouter' | 'openai-compatible' | undefined),
     temperature: runtimeConfig?.subagent?.temperature ?? 
                  (getEnv('SUBAGENT_TEMPERATURE') ? parseFloat(getEnv('SUBAGENT_TEMPERATURE')!) : 0.3),
     maxTokens: runtimeConfig?.subagent?.maxTokens ?? 

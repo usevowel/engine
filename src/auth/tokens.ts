@@ -29,7 +29,7 @@ export interface TokenPayload {
   maxCallDurationMs?: number; // Maximum call duration in milliseconds (default: 30 minutes)
   maxIdleDurationMs?: number; // Maximum idle duration in milliseconds (default: 3 minutes)
   // LLM Provider Configuration (Client-specified)
-  llmProvider?: 'groq' | 'openrouter' | 'cerebras' | 'workers-ai'; // LLM provider override (e.g., "groq", "openrouter", "cerebras", "workers-ai")
+  llmProvider?: 'groq' | 'openrouter' | 'openai-compatible'; // LLM provider override (e.g., "groq", "openrouter", "openai-compatible")
   openrouterProvider?: string; // OpenRouter provider selection (e.g., "anthropic", "openai", "google")
   openrouterSiteUrl?: string; // OpenRouter site URL for analytics
   openrouterAppName?: string; // OpenRouter app name for analytics
@@ -63,7 +63,7 @@ export interface TokenPayload {
   // LLM-Based Turn Detection (Experimental - Currently Disabled)
   llmTurnDetection?: {
     enabled?: boolean; // Enable/disable LLM turn detection (default: false)
-    llmProvider?: 'groq' | 'openrouter' | 'cerebras'; // LLM provider for turn detection
+    llmProvider?: 'groq' | 'openrouter'; // LLM provider for turn detection
     llmModel?: string; // LLM model for turn detection (default: llama-3.1-8b-instant)
     debounceMs?: number; // Debounce time in ms (default: 150)
     timeoutMs?: number; // Timeout in ms (default: 3000)
@@ -113,7 +113,7 @@ export async function generateEphemeralToken(
   maxCallDurationMs: number = config.callDuration.maxCallDurationMs, // Default from env: 30 minutes
   maxIdleDurationMs: number = config.callDuration.maxIdleDurationMs,  // Default from env: 10 minutes
   llmProviderConfig?: {
-    llmProvider?: 'groq' | 'openrouter' | 'cerebras' | 'workers-ai';
+    llmProvider?: 'groq' | 'openrouter' | 'openai-compatible';
     openrouterProvider?: string;
     openrouterSiteUrl?: string;
     openrouterAppName?: string;

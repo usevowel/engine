@@ -396,6 +396,7 @@ export class CustomAgent implements ILLMAgent {
     try {
       llmClient = getProvider(this.config.provider as any, {
         apiKey: this.config.apiKey,
+        baseUrl: this.config.baseUrl,
         openrouterSiteUrl: this.config.openrouterSiteUrl,
         openrouterAppName: this.config.openrouterAppName,
       });
@@ -1090,4 +1091,3 @@ export class CustomAgent implements ILLMAgent {
     getEventSystem().info(EventCategory.LLM, '✅ [CustomAgent] Cleanup complete');
   }
 }
-

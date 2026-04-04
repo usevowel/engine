@@ -8,41 +8,22 @@
  */
 
 import { createGroq } from '@ai-sdk/groq';
+import { createOpenAI } from '@ai-sdk/openai';
 import { createOpenRouter } from '@openrouter/ai-sdk-provider';
-import { createCerebras } from '@ai-sdk/cerebras';
-import { createWorkersAI } from 'workers-ai-provider';
 
 import { getEventSystem, EventCategory } from '../../../events';
-
-export interface WorkersAIBinding {
-  run(model: string, inputs: unknown, options?: unknown): Promise<unknown>;
-}
-
-let registeredWorkersAIBinding: WorkersAIBinding | null = null;
 
 /**
  * Provider configuration
  */
 export interface ProviderConfig {
   apiKey: string;
+  baseUrl?: string;
   openrouterSiteUrl?: string;  // OpenRouter specific
   openrouterAppName?: string;  // OpenRouter specific
-  workersAI?: WorkersAIBinding;
 }
 
 type ProviderFactory = (config: ProviderConfig) => any;
-
-function getWorkersAIBinding(config: ProviderConfig): WorkersAIBinding {
-  const binding = config.workersAI ?? registeredWorkersAIBinding;
-
-  if (!binding) {
-    throw new Error(
-      'Cloudflare Workers AI binding not configured. Call registerWorkersAIBinding(env.AI) before using the workers-ai provider.'
-    );
-  }
-
-  return binding;
-}
 
 /**
  * Provider Factory Functions
@@ -51,7 +32,7 @@ function getWorkersAIBinding(config: ProviderConfig): WorkersAIBinding {
  * All providers follow the same interface defined by Vercel AI SDK.
  * 
  * To add a new provider:
- * 1. Install the provider package (e.g., bun add @cerebras/ai-sdk-provider)
+ * 1. Install the provider package
  * 2. Import the create function
  * 3. Add entry to PROVIDER_FACTORIES
  * 4. Types update automatically everywhere!
@@ -76,21 +57,14 @@ const PROVIDER_FACTORIES = {
       ...(config.openrouterAppName && { 'X-Title': config.openrouterAppName }),
     },
   })) as ProviderFactory,
-  
-  /**
-   * Cerebras - Ultra-fast inference on CS-3 chips
-   * Models: llama-3.3-70b, llama-3.1-8b, llama-3.1-70b
-   */
-  cerebras: ((config: ProviderConfig) => createCerebras({
-    apiKey: config.apiKey,
-  })) as ProviderFactory,
 
   /**
-   * Cloudflare Workers AI - Runs on the Worker-side AI binding
-   * Models: @cf/... catalog entries such as @cf/zai-org/glm-4.7-flash
+   * OpenAI-compatible - Local/self-hosted OpenAI API compatible endpoints
    */
-  'workers-ai': ((config: ProviderConfig) => createWorkersAI({
-    binding: getWorkersAIBinding(config) as any,
+  'openai-compatible': ((config: ProviderConfig) => createOpenAI({
+    apiKey: config.apiKey,
+    baseURL: config.baseUrl,
+    name: 'openai-compatible',
   })) as ProviderFactory,
   
   // Future providers:
@@ -103,20 +77,9 @@ const PROVIDER_FACTORIES = {
  * 
  * ✅ Adding a new provider to PROVIDER_FACTORIES automatically updates this type!
  * 
- * Current providers: 'groq' | 'openrouter' | 'cerebras' | 'workers-ai'
+ * Current OSS providers: 'groq' | 'openrouter' | 'openai-compatible'
  */
 export type SupportedProvider = keyof typeof PROVIDER_FACTORIES;
-
-/**
- * Register the Cloudflare Workers AI binding for this isolate.
- *
- * The hosted runtime does this during Worker/DO startup so shared engine code can
- * instantiate the `workers-ai` provider without threading the binding through
- * every call site.
- */
-export function registerWorkersAIBinding(binding?: WorkersAIBinding | null): void {
-  registeredWorkersAIBinding = binding ?? null;
-}
 
 /**
  * Get a provider instance by name
@@ -146,10 +109,10 @@ export function getProvider(provider: SupportedProvider, config: ProviderConfig)
     : 'MISSING';
   getEventSystem().info(EventCategory.PROVIDER, `🔑 Provider Registry: Creating ${provider} provider`, {
     apiKeyPreview,
+    baseUrl: config.baseUrl,
     hasOpenRouterHeaders: !!(config.openrouterSiteUrl || config.openrouterAppName),
     openrouterSiteUrl: config.openrouterSiteUrl,
     openrouterAppName: config.openrouterAppName,
-    hasWorkersAIBinding: !!(config.workersAI ?? registeredWorkersAIBinding),
   });
   
   const providerInstance = factory(config);

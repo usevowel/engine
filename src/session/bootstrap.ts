@@ -34,6 +34,10 @@ export interface SessionBootstrapEnv {
   GROQ_REASONING_EFFORT?: string;
 }
 
+function resolveDefaultVoice(env: SessionBootstrapEnv, tokenVoice?: string): string {
+  return tokenVoice || env.DEFAULT_VOICE || DEFAULT_VALUES.defaultVoice;
+}
+
 export interface TokenAgentConfig {
   testMode?: boolean;
   agentMaxSteps?: number;
@@ -78,7 +82,7 @@ export function buildSessionConfig(
   tokenAgentConfig?: TokenAgentConfig,
   tokenLanguageVoiceMap?: Record<string, string>
 ): SessionData {
-  const defaultVoice = tokenVoice || DEFAULT_VALUES.defaultVoice;
+  const defaultVoice = resolveDefaultVoice(env, tokenVoice);
   const speakingRate =
     tokenSpeakingRate ?? DEFAULT_VALUES.speakingRate;
   const vadProvider = env.VAD_PROVIDER || 'silero';
