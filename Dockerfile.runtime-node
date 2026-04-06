@@ -8,7 +8,7 @@ COPY package.json bun.lock tsconfig.json ./
 COPY packages ./packages
 COPY src ./src
 
-RUN bun install --frozen-lockfile --ignore-scripts
+RUN bun install --frozen-lockfile --ignore-scripts --no-cache
 
 ENV NODE_ENV=production
 ENV PORT=8787
