@@ -9,6 +9,7 @@
  */
 
 import { join } from 'path';
+import { existsSync, createWriteStream, mkdirSync } from 'fs';
 
 import { getEventSystem, EventCategory } from '../events';
 // Lazy-load onnxruntime-node to avoid bundling issues
@@ -23,6 +24,66 @@ async function loadONNXRuntime() {
 
 const SILERO_VAD_MODEL_PATH = process.env.SILERO_VAD_MODEL_PATH || 
   join(process.cwd(), 'vendor/silero-vad/silero_vad.onnx');
+
+// Model download URL from official Silero VAD repository
+const SILERO_VAD_MODEL_URL = 'https://github.com/snakers4/silero-vad/raw/master/src/silero_vad/data/silero_vad.onnx';
+
+/**
+ * Auto-download Silero VAD model if not present
+ */
+async function ensureVADModel(): Promise<void> {
+  if (existsSync(SILERO_VAD_MODEL_PATH)) {
+    return;
+  }
+
+  getEventSystem().info(EventCategory.VAD, '📥 Silero VAD model not found, auto-downloading...');
+  getEventSystem().info(EventCategory.VAD, `   URL: ${SILERO_VAD_MODEL_URL}`);
+  getEventSystem().info(EventCategory.VAD, `   Target: ${SILERO_VAD_MODEL_PATH}`);
+
+  try {
+    // Create directory if needed
+    const targetDir = join(process.cwd(), 'vendor', 'silero-vad');
+    if (!existsSync(targetDir)) {
+      mkdirSync(targetDir, { recursive: true });
+    }
+
+    // Download model
+    const response = await fetch(SILERO_VAD_MODEL_URL);
+    if (!response.ok) {
+      throw new Error(`Failed to download: ${response.status} ${response.statusText}`);
+    }
+
+    const fileStream = createWriteStream(SILERO_VAD_MODEL_PATH);
+    const reader = response.body?.getReader();
+
+    if (!reader) {
+      throw new Error('Response body is not readable');
+    }
+
+    let downloaded = 0;
+    const contentLength = response.headers.get('content-length');
+    const total = contentLength ? parseInt(contentLength, 10) : null;
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      fileStream.write(Buffer.from(value));
+      downloaded += value.length;
+
+      if (total) {
+        const percent = ((downloaded / total) * 100).toFixed(1);
+        process.stdout.write(`\r   Progress: ${percent}% (${(downloaded / 1024 / 1024).toFixed(2)} MB)`);
+      }
+    }
+
+    fileStream.end();
+    console.log('\n✅ Silero VAD model downloaded successfully');
+  } catch (error) {
+    getEventSystem().error(EventCategory.VAD, '❌ Failed to auto-download VAD model:', error);
+    throw new Error(`Failed to download VAD model: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  }
+}
 
 /**
  * VAD configuration options
@@ -85,62 +146,44 @@ export class SileroVAD {
 
   /**
    * Auto-detect best available execution providers
+   * 
+   * NOTE: onnxruntime-node npm package only includes CPU execution provider.
+   * GPU support (CUDA/DirectML) requires:
+   * - Custom onnxruntime build with GPU support
+   * - Proper NVIDIA/AMD drivers and libraries
+   * - ORT_CUDA_PROVIDER or ORT_DML_PROVIDER env vars explicitly set
    */
   private detectExecutionProviders(): string[] {
     const providers: string[] = [];
     let hasGPU = false;
 
-    // Try CUDA first (NVIDIA GPUs)
-    try {
-      // Check if CUDA is available (rough check via env or file system)
-      if (process.env.CUDA_VISIBLE_DEVICES !== undefined || 
-          require('fs').existsSync('/usr/local/cuda')) {
-        providers.push('cuda');
-        hasGPU = true;
-        getEventSystem().info(EventCategory.PROVIDER, '✅ CUDA execution provider detected');
-      }
-    } catch {}
-
-    // Try Vulkan (cross-platform GPU)
-    try {
-      const fs = require('fs');
-      const vulkanPaths = [
-        '/usr/lib/libvulkan.so',
-        '/usr/lib/x86_64-linux-gnu/libvulkan.so.1',
-        '/usr/lib/x86_64-linux-gnu/libvulkan.so',
-        '/usr/local/lib/libvulkan.so',
-        '/opt/amdgpu/lib/x86_64-linux-gnu/libvulkan.so.1', // AMD GPU Pro
-        process.platform === 'win32' ? 'C:\\Windows\\System32\\vulkan-1.dll' : null,
-        process.platform === 'darwin' ? '/usr/local/lib/libvulkan.dylib' : null,
-      ].filter(Boolean);
-      
-      const hasVulkan = vulkanPaths.some(path => {
-        try {
-          return fs.existsSync(path as string);
-        } catch {
-          return false;
-        }
-      });
-      
-      if (hasVulkan) {
-        // Note: Standard onnxruntime-node may not support Vulkan EP
-        // This requires either a custom build or ROCm EP (AMD)
-        // We try adding it anyway - ONNX Runtime will ignore if unsupported
-        providers.push('dml'); // DirectML (Windows GPU acceleration)
-        hasGPU = true;
-        getEventSystem().info(EventCategory.VAD, '✅ Vulkan libraries detected (attempting DirectML/GPU acceleration)');
-      }
-    } catch (error) {
-      // Silent fail for Vulkan detection
+    // Check for explicit GPU provider configuration
+    // Standard onnxruntime-node only supports CPU - GPU requires custom build
+    if (process.env.ORT_CUDA_PROVIDER === '1' || process.env.ORT_CUDA_PROVIDER === 'true') {
+      // Only try CUDA if explicitly requested via env (requires custom onnxruntime build)
+      getEventSystem().warn(EventCategory.VAD, '⚠️  ORT_CUDA_PROVIDER set but onnxruntime-node requires custom CUDA build');
+      getEventSystem().warn(EventCategory.VAD, '⚠️  Standard npm package only supports CPU execution');
+      getEventSystem().info(EventCategory.VAD, '   To enable CUDA, install onnxruntime-node from source with CUDA support');
     }
 
-    // Always add CPU as fallback
+    if (process.env.ORT_DML_PROVIDER === '1' || process.env.ORT_DML_PROVIDER === 'true') {
+      // DirectML for Windows GPU
+      getEventSystem().warn(EventCategory.VAD, '⚠️  ORT_DML_PROVIDER set but DirectML requires onnxruntime-node with DirectML support');
+    }
+
+    // Always use CPU for standard onnxruntime-node package
+    // GPU support requires:
+    // 1. Building onnxruntime from source with CUDA/DirectML flags
+    // 2. Installing with: npm install onnxruntime-node --build-from-source --onnxruntime_cuda_version=11.8
+    // 3. Or using the official CUDA-enabled binaries (separate package)
     providers.push('cpu');
 
     if (!hasGPU) {
-      getEventSystem().warn(EventCategory.VAD, '⚠️  WARNING: No GPU acceleration libraries detected for VAD!');
-      getEventSystem().warn(EventCategory.VAD, '⚠️  Install CUDA Toolkit (NVIDIA) or Vulkan SDK (AMD/Intel) for better performance');
-      getEventSystem().warn(EventCategory.PERFORMANCE, '⚠️  Running on CPU only - expect higher latency (~50-100ms per inference)');
+      getEventSystem().info(EventCategory.VAD, 'ℹ️  VAD using CPU execution (standard onnxruntime-node)');
+      getEventSystem().info(EventCategory.PERFORMANCE, '⚡ To enable GPU acceleration (~5-10ms vs ~50-100ms):');
+      getEventSystem().info(EventCategory.VAD, '   1. Build onnxruntime-node with CUDA: https://onnxruntime.ai/docs/build/');
+      getEventSystem().info(EventCategory.VAD, '   2. Or use pre-built CUDA binaries (requires separate installation)');
+      getEventSystem().info(EventCategory.PERFORMANCE, '⚡ Current latency: ~50-100ms per inference (acceptable for most use cases)');
     }
 
     return providers;
@@ -153,6 +196,9 @@ export class SileroVAD {
     if (this.session) return;
 
     try {
+      // Auto-download model if not present
+      await ensureVADModel();
+
       // Lazy-load onnxruntime-node
       const runtime = await loadONNXRuntime();
       

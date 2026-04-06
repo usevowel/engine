@@ -1,17 +1,23 @@
-FROM oven/bun:1.2-alpine
+FROM oven/bun:1.2-debian
 
-RUN apk add --no-cache curl
+# Install curl and any CUDA dependencies (if needed for GPU support)
+RUN apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
 COPY package.json bun.lock tsconfig.json ./
 COPY packages ./packages
 COPY src ./src
+COPY scripts ./scripts
 
-RUN bun install --frozen-lockfile --ignore-scripts --no-cache
+RUN bun install --no-cache --ignore-scripts && rm -rf node_modules/package 2>/dev/null || true
+
+# Note: Silero VAD model is auto-downloaded at runtime if not present
+# This allows the engine to work even if the model file is missing from the image
 
 ENV NODE_ENV=production
 ENV PORT=8787
+ENV VAD_MODEL_PATH=/app/vendor/silero-vad/silero_vad.onnx
 
 EXPOSE 8787
 
