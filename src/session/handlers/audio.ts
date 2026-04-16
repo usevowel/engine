@@ -31,8 +31,18 @@ import { LanguageDetectionService } from '../../services/language-detection/Lang
 // Forward declaration - will be imported from response/index.ts
 let generateResponse: (ws: ServerWebSocket<SessionData>, options?: any) => Promise<void>;
 
+function usesIntegratedTurnDetection(data: SessionData): boolean {
+  return !!data.runtimeConfig && SessionManager.isVADIntegrated(data.runtimeConfig);
+}
+
+function isExplicitClientSideVAD(data: SessionData): boolean {
+  return data.config.turn_detection === null && !usesIntegratedTurnDetection(data);
+}
+
 function shouldUseStreamingSTT(data: SessionData): boolean {
-  return data.providers?.stt.type === 'streaming' && data.config.turn_detection !== null;
+  return data.providers?.stt.type === 'streaming' && (
+    usesIntegratedTurnDetection(data) || data.config.turn_detection !== null
+  );
 }
 
 /**
@@ -64,7 +74,7 @@ export async function handleAudioAppend(ws: ServerWebSocket<SessionData>, event:
     
     await exitHibernation(ws, async () => {
       if (!shouldUseStreamingSTT(data)) {
-        getEventSystem().info(EventCategory.STT, '⏭️ Skipping STT stream reinit in client-side VAD mode');
+        getEventSystem().info(EventCategory.STT, '⏭️ Skipping STT stream reinit in explicit client-side VAD mode');
         return;
       }
 
@@ -580,9 +590,10 @@ export async function handleAudioCommit(ws: ServerWebSocket<SessionData>, event:
     let transcript: string;
     let detectedLanguage: string | undefined;
     
-    // Check if client-side VAD is enabled (null turn_detection)
-    // When client-side VAD is enabled, we skip streaming STT and use batch transcription
-    const isClientSideVAD = data.config.turn_detection === null;
+    // Only explicit client-side VAD should force batch transcription.
+    // Provider-managed integrated VAD also uses null turn_detection, but still relies on
+    // a live streaming STT session.
+    const isClientSideVAD = isExplicitClientSideVAD(data);
     
     // Use provider-based transcription
     // When client-side VAD is enabled, always use batch transcription (Groq Whisper)

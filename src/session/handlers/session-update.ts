@@ -186,8 +186,10 @@ export async function handleSessionUpdate(ws: ServerWebSocket<SessionData>, even
     
     getEventSystem().debug(EventCategory.SESSION, '🔍 Requested turn_detection:', requestedTurnDetection ? JSON.stringify(requestedTurnDetection) : 'undefined');
     
-    // Check if client is requesting client-side VAD mode
-    // Client sends type: 'disabled' to indicate they will handle VAD client-side
+    // Check if client is explicitly requesting client-side VAD mode.
+    // This is distinct from provider-managed integrated VAD: both are represented
+    // as `turn_detection: null`, but only explicit client-side VAD should tear down
+    // an active streaming STT session.
     const isClientVADRequested = requestedTurnDetection?.type === 'disabled' || 
       requestedTurnDetection?.mode === 'client_vad';
     
@@ -251,7 +253,9 @@ export async function handleSessionUpdate(ws: ServerWebSocket<SessionData>, even
       }
     } else if (data.config.turn_detection !== undefined) {
       getEventSystem().info(EventCategory.SESSION, '✅ Preserving existing turn_detection config');
-      // No new turn_detection from client, preserve existing (including null for client-side VAD)
+      // No new turn_detection from client, preserve existing.
+      // `null` can mean either explicit client-side VAD or provider-managed integrated VAD,
+      // so downstream cleanup must not infer client-side ownership from null alone.
       turnDetectionConfig = data.config.turn_detection;
     } else {
       getEventSystem().info(EventCategory.SESSION, '✅ Using default turn_detection config');
@@ -290,10 +294,11 @@ export async function handleSessionUpdate(ws: ServerWebSocket<SessionData>, even
       turn_detection: turnDetectionConfig, // Use accumulated turn_detection
     };
 
-    if (turnDetectionConfig === null && data.sttStream) {
+    if (isClientVADRequested && data.sttStream) {
+      const sttStreamToStop = data.sttStream;
       getEventSystem().info(EventCategory.STT, '🛑 Stopping streaming STT because client-side VAD is active');
       try {
-        await data.sttStream.stop();
+        await sttStreamToStop.stop();
       } catch (error) {
         getEventSystem().error(
           EventCategory.STT,
@@ -304,6 +309,11 @@ export async function handleSessionUpdate(ws: ServerWebSocket<SessionData>, even
         data.sttStream = undefined;
         data.sttStreamInitializing = false;
       }
+    } else if (usesIntegratedVAD && data.sttStream) {
+      getEventSystem().debug(
+        EventCategory.STT,
+        '✅ Preserving streaming STT session because turn detection is provider-managed by the integrated STT/VAD provider'
+      );
     }
     
     // Convert tools from Vowel format to OpenAI format if needed

@@ -229,17 +229,21 @@ async function createSessionData(req: IncomingMessage): Promise<SessionData> {
   }
 
   const payload = await verifyToken(token);
+
+  // Extract provider config from token payload for per-session override
+  const tokenProviderConfig = payload.providerConfig;
+
   const sessionId =
     (typeof payload.sub === 'string' && payload.sub) ||
     (typeof payload.sessionId === 'string' && payload.sessionId) ||
     generateSessionId();
   const model = typeof payload.model === 'string' ? payload.model : runtimeConfig.llm.model;
 
-  const ttsConfig = runtimeConfig.providers.tts.config as Record<string, unknown> | undefined;
+  const ttsConfig = tokenProviderConfig?.tts?.config ?? runtimeConfig.providers.tts.config as Record<string, unknown> | undefined;
   const envLike = {
     DEFAULT_VOICE: ttsConfig?.voice,
-    STT_PROVIDER: runtimeConfig.providers.stt.provider,
-    VAD_PROVIDER: runtimeConfig.providers.vad.provider,
+    STT_PROVIDER: tokenProviderConfig?.stt?.provider ?? runtimeConfig.providers.stt.provider,
+    VAD_PROVIDER: tokenProviderConfig?.vad?.provider ?? runtimeConfig.providers.vad.provider,
     VAD_ENABLED: String(runtimeConfig.providers.vad.enabled),
     POSTHOG_API_KEY: process.env.POSTHOG_API_KEY,
     POSTHOG_ENABLED: process.env.POSTHOG_ENABLED,

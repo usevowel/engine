@@ -80,12 +80,17 @@ export function buildSessionConfig(
   tokenLanguage?: string,
   tokenLanguageDetection?: any,
   tokenAgentConfig?: TokenAgentConfig,
-  tokenLanguageVoiceMap?: Record<string, string>
+  tokenLanguageVoiceMap?: Record<string, string>,
+  providerOverride?: {
+    stt?: { provider?: string; config?: Record<string, unknown> };
+    tts?: { provider?: string; config?: Record<string, unknown> };
+    vad?: { provider?: string; config?: Record<string, unknown> };
+  }
 ): SessionData {
   const defaultVoice = resolveDefaultVoice(env, tokenVoice);
   const speakingRate =
     tokenSpeakingRate ?? DEFAULT_VALUES.speakingRate;
-  const vadProvider = env.VAD_PROVIDER || 'silero';
+  const vadProvider = providerOverride?.vad?.provider ?? (env.VAD_PROVIDER || 'silero');
   const vadEnabled = vadProvider !== 'none' && env.VAD_ENABLED !== 'false';
   const turnDetection = buildTurnDetectionConfig(env);
 
