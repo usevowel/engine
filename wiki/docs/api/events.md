@@ -26,8 +26,8 @@
 | `response.created` | Response generation started |
 | `response.done` | Response completed |
 | `response.text.delta` | Text delta available |
-| `response.audio.delta` | Audio delta available |
-| `response.audio_transcript.delta` | Audio transcript delta |
+| `response.output_audio.delta` | Audio delta available |
+| `response.output_audio_transcript.delta` | Audio transcript delta |
 | `error` | Error occurred |
 
 ## Event Flow Example
@@ -43,6 +43,6 @@ Server: input_audio_buffer.transcribed
 Client: response.create
 Server: response.created
 Server: response.text.delta (×N)
-Server: response.audio.delta (×N)
+Server: response.output_audio.delta (×N)
 Server: response.done
 ```

@@ -574,6 +574,28 @@ export async function generateResponse(ws: ServerWebSocket<SessionData>, options
     let llmFirstTokenReceived = false;
     /** Token usage from LLM provider (captured from usage events) */
     let tokenUsage: { promptTokens?: number; completionTokens?: number; totalTokens?: number } | null = null;
+
+    const logResponseDebug = (
+      stage: string,
+      extra: Record<string, unknown> = {},
+      category: EventCategory = EventCategory.SESSION,
+    ): void => {
+      const details = {
+        responseId,
+        currentResponseId: data.currentResponseId,
+        itemId,
+        fullTextLength: fullText.length,
+        audioStarted,
+        streamedAudioChunkCount: allAudioChunks.length,
+        toolCalled,
+        serverToolCalled,
+        llmFirstTokenReceived,
+        firstAudioSentAt: latency.firstAudioSent || null,
+        ...extra,
+      };
+
+      getEventSystem().warn(category, `🔬 [Response Debug] ${stage} :: ${JSON.stringify(details)}`);
+    };
     
     // Stream LLM response with tool support
     latency.llmStreamStart = Date.now();
@@ -707,6 +729,10 @@ export async function generateResponse(ws: ServerWebSocket<SessionData>, options
       // Check if cancelled
       if (data.currentResponseId !== responseId) {
         getEventSystem().warn(EventCategory.SESSION, `⚠️ Response cancelled: currentResponseId=${data.currentResponseId}, responseId=${responseId}`);
+        logResponseDebug('early return before processing LLM part', {
+          partType: part.type,
+          reason: 'currentResponseId mismatch at stream loop top',
+        });
         latency.responseEnd = Date.now();
         return;
       }
@@ -759,6 +785,10 @@ export async function generateResponse(ws: ServerWebSocket<SessionData>, options
                   chunkSkipped = true;
                   getEventSystem().info(EventCategory.RESPONSE_FILTER,
                     `⏭️  [Filter] Chunk skipped (duplicate detected): "${textChunk.substring(0, 60)}..."`);
+                  logResponseDebug('streaming chunk skipped by response filter', {
+                    originalChunkLength: textChunk.length,
+                    filteredChunkLength: filteredChunk.length,
+                  }, EventCategory.RESPONSE_FILTER);
 
                   // Mark that we detected repetition for next LLM turn
                   if (!data.detectedRepetition) {
@@ -786,6 +816,10 @@ export async function generateResponse(ws: ServerWebSocket<SessionData>, options
             // Check if response was cancelled (interrupt) - stop immediately before TTS synthesis
             if (data.currentResponseId !== responseId) {
               getEventSystem().info(EventCategory.AUDIO, `⚡ Response ${responseId} cancelled during text chunking - stopping TTS`);
+              logResponseDebug('early return before streaming TTS synthesis', {
+                chunkLength: chunkToSynthesize.length,
+                reason: 'currentResponseId mismatch during text chunking',
+              }, EventCategory.AUDIO);
               return;
             }
 
@@ -801,6 +835,9 @@ export async function generateResponse(ws: ServerWebSocket<SessionData>, options
             // Start audio content part if not started
             if (!audioStarted) {
               audioStarted = true;
+              logResponseDebug('starting audio content part for streaming response', {
+                chunkLength: chunkToSynthesize.length,
+              }, EventCategory.AUDIO);
               sendContentPartAdded(ws, responseId, itemId, 0, 1, { type: 'audio', transcript: '' });
             }
 
@@ -841,18 +878,32 @@ export async function generateResponse(ws: ServerWebSocket<SessionData>, options
             // Check again after TTS synthesis completes (interrupt may have occurred during synthesis)
             if (data.currentResponseId !== responseId) {
               getEventSystem().info(EventCategory.AUDIO, `⚡ Response ${responseId} cancelled after TTS synthesis - discarding audio`);
+              logResponseDebug('early return after streaming TTS synthesis', {
+                synthesizedAudioChunkCount: audioChunks.length,
+                chunkLength: chunkToSynthesize.length,
+                reason: 'currentResponseId mismatch after TTS synthesis',
+              }, EventCategory.AUDIO);
               return;
             }
 
             allAudioChunks.push(...audioChunks);
 
             // Send transcript delta (use filtered chunk)
+            logResponseDebug('sending streaming audio transcript delta', {
+              transcriptChunkLength: chunkToSynthesize.length,
+              synthesizedAudioChunkCount: audioChunks.length,
+            }, EventCategory.AUDIO);
             sendAudioTranscriptDelta(ws, responseId, itemId, chunkToSynthesize);
 
             // Stream audio chunks
             for (const chunk of audioChunks) {
               if (data.currentResponseId !== responseId) {
                 getEventSystem().info(EventCategory.AUDIO, `⚡ Response ${responseId} cancelled during audio streaming - stopping`);
+                logResponseDebug('early return during streaming audio delta send', {
+                  pendingChunkBytes: chunk.byteLength,
+                  synthesizedAudioChunkCount: audioChunks.length,
+                  reason: 'currentResponseId mismatch during audio streaming',
+                }, EventCategory.AUDIO);
                 return;
               }
 
@@ -873,6 +924,11 @@ export async function generateResponse(ws: ServerWebSocket<SessionData>, options
 
               sendAudioDelta(ws, responseId, itemId, chunk);
             }
+
+            logResponseDebug('completed streaming audio delta batch', {
+              synthesizedAudioChunkCount: audioChunks.length,
+              transcriptChunkLength: chunkToSynthesize.length,
+            }, EventCategory.AUDIO);
           }
         } else {
           // Explicit mode: send text delta but skip TTS synthesis
@@ -1226,20 +1282,39 @@ export async function generateResponse(ws: ServerWebSocket<SessionData>, options
       allAudioChunks.push(...audioChunks);
       
       // Send transcript delta
+      logResponseDebug('sending buffered audio transcript delta', {
+        transcriptChunkLength: fullText.length,
+        synthesizedAudioChunkCount: audioChunks.length,
+      }, EventCategory.AUDIO);
       sendAudioTranscriptDelta(ws, responseId, itemId, fullText);
       
       // Stream audio chunks
       for (const chunk of audioChunks) {
-        if (data.currentResponseId !== responseId) return;
+        if (data.currentResponseId !== responseId) {
+          logResponseDebug('early return during buffered audio delta send', {
+            pendingChunkBytes: chunk.byteLength,
+            synthesizedAudioChunkCount: audioChunks.length,
+            reason: 'currentResponseId mismatch during buffered audio streaming',
+          }, EventCategory.AUDIO);
+          return;
+        }
         
         sendAudioDelta(ws, responseId, itemId, chunk);
       }
+
+      logResponseDebug('completed buffered audio delta batch', {
+        synthesizedAudioChunkCount: audioChunks.length,
+        transcriptChunkLength: fullText.length,
+      }, EventCategory.AUDIO);
     }
     
     // If a tool was called, don't flush text or complete the response
     // Wait for client to send tool output and response.create
     if (toolCalled) {
       getEventSystem().info(EventCategory.SESSION, '⏸️  Response paused - waiting for tool output from client');
+      logResponseDebug('response paused awaiting client tool output', {
+        status: 'incomplete',
+      });
       
       // Send text.done with what we have so far
       if (fullText) {
@@ -1271,6 +1346,10 @@ export async function generateResponse(ws: ServerWebSocket<SessionData>, options
               chunkSkipped = true;
               getEventSystem().info(EventCategory.RESPONSE_FILTER,
                 `⏭️  [Filter] Final chunk skipped (duplicate detected): "${textChunk.substring(0, 60)}..."`);
+              logResponseDebug('final chunk skipped by response filter', {
+                originalChunkLength: textChunk.length,
+                filteredChunkLength: filteredChunk.length,
+              }, EventCategory.RESPONSE_FILTER);
 
               // Mark that we detected repetition for next LLM turn
               if (!data.detectedRepetition) {
@@ -1300,6 +1379,9 @@ export async function generateResponse(ws: ServerWebSocket<SessionData>, options
         
         if (!audioStarted) {
           audioStarted = true;
+          logResponseDebug('starting audio content part for final chunk flush', {
+            chunkLength: chunkToSynthesize.length,
+          }, EventCategory.AUDIO);
           sendContentPartAdded(ws, responseId, itemId, 0, 1, { type: 'audio', transcript: '' });
         }
         
@@ -1329,10 +1411,21 @@ export async function generateResponse(ws: ServerWebSocket<SessionData>, options
         getEventSystem().info(EventCategory.TTS, `⏱️  TTS synthesis (final): ${ttsEnd - ttsStart}ms for ${chunkToSynthesize.length} chars`);
         allAudioChunks.push(...audioChunks);
         
+        logResponseDebug('sending final audio transcript delta', {
+          transcriptChunkLength: chunkToSynthesize.length,
+          synthesizedAudioChunkCount: audioChunks.length,
+        }, EventCategory.AUDIO);
         sendAudioTranscriptDelta(ws, responseId, itemId, chunkToSynthesize);
         
         for (const chunk of audioChunks) {
-          if (data.currentResponseId !== responseId) return;
+          if (data.currentResponseId !== responseId) {
+            logResponseDebug('early return during final audio delta send', {
+              pendingChunkBytes: chunk.byteLength,
+              synthesizedAudioChunkCount: audioChunks.length,
+              reason: 'currentResponseId mismatch during final audio streaming',
+            }, EventCategory.AUDIO);
+            return;
+          }
           
           // Track first audio sent for TTFS
           if (latency.firstAudioSent === 0) {
@@ -1352,6 +1445,11 @@ export async function generateResponse(ws: ServerWebSocket<SessionData>, options
           
           sendAudioDelta(ws, responseId, itemId, chunk);
         }
+
+        logResponseDebug('completed final audio delta batch', {
+          synthesizedAudioChunkCount: audioChunks.length,
+          transcriptChunkLength: chunkToSynthesize.length,
+        }, EventCategory.AUDIO);
       }
     }
     
@@ -1465,6 +1563,10 @@ export async function generateResponse(ws: ServerWebSocket<SessionData>, options
     
     // Send audio transcript done
     if (audioStarted) {
+      logResponseDebug('sending audio completion events', {
+        transcriptLength: fullText.length,
+        finalAudioChunkCount: allAudioChunks.length,
+      }, EventCategory.AUDIO);
       sendAudioTranscriptDone(ws, responseId, itemId, fullText);
       
       // Send audio.done
@@ -1506,6 +1608,11 @@ export async function generateResponse(ws: ServerWebSocket<SessionData>, options
     data.conversationHistory.push(outputItem);
     
     // Send output_item.done
+    logResponseDebug('sending final response completion events', {
+      outputItemStatus: outputItem.status,
+      finalAudioChunkCount: allAudioChunks.length,
+      transcriptLength: fullText.length,
+    });
     sendOutputItemDone(ws, responseId, 0, outputItem);
     
     // Send response.done
@@ -1859,9 +1966,11 @@ export async function generateResponse(ws: ServerWebSocket<SessionData>, options
         },
       }));
       
-      // Close WebSocket with error code
+      // Close WebSocket with error code after short delay to allow client to process the error
       getEventSystem().error(EventCategory.SESSION, `🔌 Closing WebSocket due to TTS error (code: 1011): ${inworldErrorDetails.message}`);
-      ws.close(1011, `Inworld TTS error: ${inworldErrorDetails.message}`);
+      setTimeout(() => {
+        ws.close(1011, `Inworld TTS error: ${inworldErrorDetails.message}`);
+      }, 100);
     } else if (isOpenAICompatibleTTSError && openAICompatibleErrorDetails) {
       getEventSystem().error(EventCategory.TTS, '⚠️ OpenAI-compatible TTS error - sending structured error');
 
@@ -1885,7 +1994,9 @@ export async function generateResponse(ws: ServerWebSocket<SessionData>, options
       }));
 
       getEventSystem().error(EventCategory.SESSION, `🔌 Closing WebSocket due to OpenAI-compatible TTS error (code: 1011): ${openAICompatibleErrorDetails.message}`);
-      ws.close(1011, `OpenAI-compatible TTS error: ${openAICompatibleErrorDetails.message}`);
+      setTimeout(() => {
+        ws.close(1011, `OpenAI-compatible TTS error: ${openAICompatibleErrorDetails.message}`);
+      }, 100);
     } else {
       // Fatal error (default): Send error and close WebSocket
       // This catches all errors not explicitly whitelisted as recoverable
@@ -1906,9 +2017,11 @@ export async function generateResponse(ws: ServerWebSocket<SessionData>, options
         },
       }));
       
-      // Close WebSocket with error code
+      // Close WebSocket with error code after short delay to allow client to process the error
       getEventSystem().critical(EventCategory.SESSION, `🔌 Closing WebSocket due to fatal error (code: 1011): ${errorAnalysis.errorType} - ${errorAnalysis.message}`);
-      ws.close(1011, errorAnalysis.message);
+      setTimeout(() => {
+        ws.close(1011, errorAnalysis.message);
+      }, 100);
     }
   } finally {
     data.currentResponseId = null;

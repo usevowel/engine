@@ -83,7 +83,7 @@ Client connects with ephemeral token
 **Server → Client (response):**
 ```json
 {
-  "type": "response.audio.delta",
+  "type": "response.output_audio.delta",
   "delta": "<base64-encoded-audio>"
 }
 ```

@@ -138,8 +138,8 @@ sequenceDiagram
     W-->>Browser: response.text.delta
     W->>TTS: Synthesize speech
     TTS-->>W: Audio chunks
-    W-->>Browser: response.audio.delta
-    W-->>Browser: response.audio_transcript.delta
+W-->>Browser: response.output_audio.delta
+W-->>Browser: response.output_audio_transcript.delta
 ```
 
 ## Component Details
@@ -183,7 +183,7 @@ Main message router handling all OpenAI Realtime API events:
 | `session.created` | Server → Client | Session established |
 | `input_audio_buffer.transcribed` | Server → Client | Transcription available |
 | `response.text.delta` | Server → Client | Text delta |
-| `response.audio.delta` | Server → Client | Audio delta |
+| `response.output_audio.delta` | Server → Client | Audio delta |
 
 ### Services Layer
 

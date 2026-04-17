@@ -193,9 +193,11 @@ export async function handleAudioAppend(ws: ServerWebSocket<SessionData>, event:
       `Audio chunk too small: ${audioChunk.length} bytes (expected ~${EXPECTED_CHUNK_SIZE} bytes). This indicates a client-side audio processing bug.`
     );
     
-    // Close connection to prevent further issues
-    getEventSystem().error(EventCategory.AUDIO, `🔌 Closing WebSocket due to invalid audio chunk (code: 1003): chunk size ${audioChunk.length} bytes, expected ~${EXPECTED_CHUNK_SIZE} bytes`);
-    ws.close(1003, 'Invalid audio chunk size - client audio processing error');
+// Close connection to prevent further issues after short delay to allow client to process the error
+      getEventSystem().error(EventCategory.AUDIO, `🔌 Closing WebSocket due to invalid audio chunk (code: 1003): chunk size ${audioChunk.length} bytes, expected ~${EXPECTED_CHUNK_SIZE} bytes`);
+      setTimeout(() => {
+        ws.close(1003, 'Invalid audio chunk size - client audio processing error');
+      }, 100);
     return;
   }
   

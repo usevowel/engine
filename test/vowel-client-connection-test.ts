@@ -67,7 +67,7 @@ async function main(): Promise<void> {
   });
 
   session.on('transport_event', (event: any) => {
-    if (event?.type !== 'response.audio.delta' && event?.type !== 'response.audio_transcript.delta') {
+    if (event?.type !== 'response.output_audio.delta' && event?.type !== 'response.output_audio_transcript.delta') {
       console.log('📨 transport_event:', event?.type, JSON.stringify(event));
     }
   });

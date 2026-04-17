@@ -150,7 +150,7 @@ Authorization: Bearer <ephemeral_token>
 - `input_audio_buffer.speech_started` - Audio detected
 - `conversation.item.created` - New conversation item
 - `response.text.delta` - Streaming text response
-- `response.audio.delta` - Streaming audio response
+- `response.output_audio.delta` - Streaming audio response
 - `response.done` - Response complete
 - `error` - Error occurred
 

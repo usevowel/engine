@@ -312,9 +312,9 @@ sequenceDiagram
     sndbrd->>LLM: User transcript
     LLM->>sndbrd: Response text
     sndbrd->>sndbrd: TTS synthesis
-    sndbrd-->>Browser: response.audio.delta
+sndbrd-->>Browser: response.output_audio.delta
     Browser->>User: Play audio
-    sndbrd-->>Browser: response.audio_transcript.delta
+sndbrd-->>Browser: response.output_audio_transcript.delta
 ```
 
 ## Next Steps

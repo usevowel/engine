@@ -31,7 +31,7 @@ sequenceDiagram
     DO->>LLM: Transcribe & Generate
     LLM-->>DO: Response Stream
     DO-->>Client: response.text.delta
-    DO-->>Client: response.audio.delta
+DO-->>Client: response.output_audio.delta
 ```
 
 ## Architecture Diagram
