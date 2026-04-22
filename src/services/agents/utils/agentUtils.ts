@@ -151,70 +151,114 @@ export function truncateContextSimple(
   ];
   
   // Repair orphaned tool-call/tool-result pairs that may have been split by truncation
-  return repairToolPairsSimple(truncated, logPrefix);
+  return repairToolMessageSequence(truncated, logPrefix);
 }
 
 /**
- * Repair orphaned tool-call/tool-result pairs after truncation
+ * Repair invalid tool-call/tool-result sequences before sending messages to AI SDK.
  * 
- * Removes any tool-call messages without matching tool-result messages (and vice versa)
- * to prevent LLM API errors like "Not the same number of function calls and responses".
+ * AI SDK requires assistant tool-call messages to be followed by matching tool
+ * result messages before the next user/system message. A raw session history can
+ * have balanced function_call/function_call_output counts while still violating
+ * this ordering, especially when system diagnostics or prompts are appended
+ * between the call and result.
  */
-function repairToolPairsSimple(messages: CoreMessage[], logPrefix: string): CoreMessage[] {
-  const toolCallIds = new Set<string>();
-  const toolResultIds = new Set<string>();
-  
-  for (const msg of messages) {
-    if (!Array.isArray(msg.content)) continue;
-    if (msg.role === 'assistant') {
-      for (const part of msg.content as any[]) {
-        if (part.type === 'tool-call' && part.toolCallId) {
-          toolCallIds.add(part.toolCallId);
-        }
-      }
-    } else if (msg.role === 'tool') {
-      for (const part of msg.content as any[]) {
+export function repairToolMessageSequence(messages: CoreMessage[], logPrefix: string = '[Agent]'): CoreMessage[] {
+  const repaired: CoreMessage[] = [];
+  let removedToolCalls = 0;
+  let removedToolResults = 0;
+
+  for (let i = 0; i < messages.length; i++) {
+    const message = messages[i];
+
+    if (message.role === 'tool') {
+      removedToolResults += Array.isArray(message.content)
+        ? (message.content as any[]).filter((part: any) => part.type === 'tool-result').length
+        : 1;
+      continue;
+    }
+
+    if (message.role !== 'assistant' || !Array.isArray(message.content)) {
+      repaired.push(message);
+      continue;
+    }
+
+    const content = message.content as any[];
+    const toolCallParts = content.filter((part: any) => part.type === 'tool-call' && part.toolCallId);
+    if (toolCallParts.length === 0) {
+      repaired.push(message);
+      continue;
+    }
+
+    let nextIndex = i + 1;
+    const adjacentToolMessages: CoreMessage[] = [];
+    while (nextIndex < messages.length && messages[nextIndex].role === 'tool') {
+      adjacentToolMessages.push(messages[nextIndex]);
+      nextIndex++;
+    }
+
+    const adjacentResultIds = new Set<string>();
+    for (const toolMessage of adjacentToolMessages) {
+      if (!Array.isArray(toolMessage.content)) continue;
+      for (const part of toolMessage.content as any[]) {
         if (part.type === 'tool-result' && part.toolCallId) {
-          toolResultIds.add(part.toolCallId);
+          adjacentResultIds.add(part.toolCallId);
         }
       }
     }
-  }
-  
-  const orphanedCallIds = new Set<string>();
-  for (const id of toolCallIds) {
-    if (!toolResultIds.has(id)) orphanedCallIds.add(id);
-  }
-  const orphanedResultIds = new Set<string>();
-  for (const id of toolResultIds) {
-    if (!toolCallIds.has(id)) orphanedResultIds.add(id);
-  }
-  
-  if (orphanedCallIds.size === 0 && orphanedResultIds.size === 0) {
-    return messages;
-  }
-  
-  getEventSystem().warn(EventCategory.LLM, `${logPrefix} ⚠️ Detected ${orphanedCallIds.size} orphaned tool-calls, ${orphanedResultIds.size} orphaned tool-results after truncation — removing`);
-  
-  return messages.filter(msg => {
-    if (!Array.isArray(msg.content)) return true;
-    
-    if (msg.role === 'assistant') {
-      const callParts = (msg.content as any[]).filter((p: any) => p.type === 'tool-call');
-      if (callParts.length > 0 && callParts.every((p: any) => orphanedCallIds.has(p.toolCallId))) {
-        return false;
+
+    const validCallIds = new Set(
+      toolCallParts
+        .map((part: any) => part.toolCallId)
+        .filter((toolCallId: string) => adjacentResultIds.has(toolCallId))
+    );
+
+    const filteredAssistantContent = content.filter((part: any) => {
+      if (part.type !== 'tool-call') return true;
+      const isValid = validCallIds.has(part.toolCallId);
+      if (!isValid) removedToolCalls++;
+      return isValid;
+    });
+
+    if (filteredAssistantContent.length > 0) {
+      repaired.push({
+        ...message,
+        content: filteredAssistantContent as any,
+      });
+    }
+
+    for (const toolMessage of adjacentToolMessages) {
+      if (!Array.isArray(toolMessage.content)) {
+        removedToolResults++;
+        continue;
+      }
+
+      const filteredToolContent = (toolMessage.content as any[]).filter((part: any) => {
+        if (part.type !== 'tool-result') return true;
+        const isValid = validCallIds.has(part.toolCallId);
+        if (!isValid) removedToolResults++;
+        return isValid;
+      });
+
+      if (filteredToolContent.length > 0) {
+        repaired.push({
+          ...toolMessage,
+          content: filteredToolContent as any,
+        });
       }
     }
-    
-    if (msg.role === 'tool') {
-      const resultParts = (msg.content as any[]).filter((p: any) => p.type === 'tool-result');
-      if (resultParts.length > 0 && resultParts.every((p: any) => orphanedResultIds.has(p.toolCallId))) {
-        return false;
-      }
-    }
-    
-    return true;
-  });
+
+    i = nextIndex - 1;
+  }
+
+  if (removedToolCalls > 0 || removedToolResults > 0) {
+    getEventSystem().warn(
+      EventCategory.LLM,
+      `${logPrefix} Repaired invalid tool message sequence: removed ${removedToolCalls} tool-call(s), ${removedToolResults} tool-result(s)`
+    );
+  }
+
+  return repaired;
 }
 
 /**

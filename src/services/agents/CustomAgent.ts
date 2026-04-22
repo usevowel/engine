@@ -34,6 +34,7 @@ import {
   formatApiKeyPreview,
   normalizeToolName,
   cleanEllipsisFromMessages,
+  repairToolMessageSequence,
   type ExtendedStreamOptions,
   type MessageTokenCount,
 } from './utils';
@@ -41,6 +42,31 @@ import {
 import { getEventSystem, EventCategory } from '../../events';
 import { getServiceForTrace } from '../../lib/agent-analytics';
 import { wrapModelWithAnalytics } from '../../lib/agent-analytics';
+
+function formatUnknownError(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message;
+  }
+
+  if (typeof error === 'string') {
+    return error;
+  }
+
+  if (error && typeof error === 'object') {
+    const message = (error as { message?: unknown }).message;
+    if (typeof message === 'string' && message.length > 0) {
+      return message;
+    }
+
+    try {
+      return JSON.stringify(error);
+    } catch {
+      return String(error);
+    }
+  }
+
+  return String(error);
+}
 /**
  * CustomAgent - Manual LLM agent with full control
  * 
@@ -197,16 +223,34 @@ export class CustomAgent implements ILLMAgent {
       baseSystemPrompt = this.config.systemPrompt;
     }
     
-    // Build deterministic tool instructions to inject into system prompt
-    const toolInstructions = sessionTools.length > 0 ? this.buildToolInstructions(sessionTools) : '';
-    console.log(
-      `[DEBUG] Tool Instructions Tools: ${sessionTools.length}`
-    )
+    // Convert session tools to proxy tools before constructing the prompt so the
+    // prompt and provider request cannot disagree about tool availability.
+    let proxyTools: Record<string, any> = {};
+    if (sessionTools.length > 0) {
+      if (serverToolContext) {
+        const { serverToolRegistry } = require('../../lib/server-tool-registry');
+        proxyTools = convertSessionToolsToProxyTools(sessionTools, serverToolContext);
+        const serverTools = serverToolRegistry.getServerToolsForAgent(serverToolContext);
+        const serverToolNames = Object.keys(serverTools);
+        proxyTools = { ...proxyTools, ...serverTools };
+        
+        getEventSystem().info(EventCategory.LLM, 
+          `🔧 [CustomAgent] Merged ${serverToolNames.length} server tools: ${serverToolNames.join(', ')}`
+        );
+        getEventSystem().info(EventCategory.LLM, 
+          `🔧 [CustomAgent] Total tools after merge: ${Object.keys(proxyTools).length} (${Object.keys(proxyTools).join(', ')})`
+        );
+      } else {
+        proxyTools = convertSessionToolsToProxyTools(sessionTools);
+      }
+    }
+
+    const availableToolNames = new Set(Object.keys(proxyTools));
+    const promptToolDefinitions = sessionTools.filter((tool: any) => availableToolNames.has(tool.name));
+    const toolInstructions = promptToolDefinitions.length > 0 ? this.buildToolInstructions(promptToolDefinitions) : '';
     const systemPromptWithTools = toolInstructions
       ? `${baseSystemPrompt}\n\n[TOOL DEFINITIONS]\n${toolInstructions}\n\nCALL TOOLS EXACTLY USING THE LISTED ARGUMENT NAMES AND TYPES. DO NOT INVENT FIELDS.`
       : baseSystemPrompt;
-    
-    // const systemPromptWithTools = baseSystemPrompt;
 
     // Build conversation history
     let conversationMessages: CoreMessage[];
@@ -306,6 +350,11 @@ export class CustomAgent implements ILLMAgent {
     
     // Clean ellipsis (repeating dots) from message content
     truncatedMessages = cleanEllipsisFromMessages(truncatedMessages);
+
+    // AI SDK requires each assistant tool-call to be followed by matching tool results
+    // before any user/system message. Repair after truncation and cleaning because both
+    // steps can expose invalid tool exchanges from older session history.
+    truncatedMessages = repairToolMessageSequence(truncatedMessages, '[CustomAgent]');
     
     // Calculate tokens after truncation
     let truncatedTokens = 0;
@@ -356,38 +405,6 @@ export class CustomAgent implements ILLMAgent {
     // Verify system message is preserved
     const hasSystemMessage = truncatedMessages[0]?.role === 'system';
     getEventSystem().error(EventCategory.LLM, `🎯 [CustomAgent] System message preserved: ${hasSystemMessage ? '✅' : '❌'}`);
-    
-    // Convert session tools to proxy tools (client-side execution)
-    // NOTE: Server tools are NOT filtered here (context not available in agent)
-    // Server tool filtering happens in response handler before tool calls
-    // However, in subagent mode, askSubagent is a server tool that needs execute function
-    // So we need to merge server tools if serverToolContext is provided
-    let proxyTools: Record<string, any> = {};
-    if (sessionTools.length > 0) {
-      if (options.serverToolContext) {
-        // We have context - convert all sessionTools to proxy tools (including server tools for definitions)
-        // CRITICAL: Don't filter out server tools here - the AI SDK needs their definitions in sessionTools
-        // The execute functions will come from the registry merge below, which will override proxy versions
-        const { serverToolRegistry } = require('../../lib/server-tool-registry');
-        proxyTools = convertSessionToolsToProxyTools(sessionTools, options.serverToolContext);
-        
-        // Merge server tools with execute functions from registry
-        // This will override any proxy versions with actual execute functions
-        const serverTools = serverToolRegistry.getServerToolsForAgent(options.serverToolContext);
-        const serverToolNames = Object.keys(serverTools);
-        proxyTools = { ...proxyTools, ...serverTools };
-        
-        getEventSystem().info(EventCategory.LLM, 
-          `🔧 [CustomAgent] Merged ${serverToolNames.length} server tools: ${serverToolNames.join(', ')}`
-        );
-        getEventSystem().info(EventCategory.LLM, 
-          `🔧 [CustomAgent] Total tools after merge: ${Object.keys(proxyTools).length} (${Object.keys(proxyTools).join(', ')})`
-        );
-      } else {
-        // No context - convert all sessionTools (legacy behavior)
-        proxyTools = convertSessionToolsToProxyTools(sessionTools);
-      }
-    }
     
     getEventSystem().info(EventCategory.LLM, `🎯 [CustomAgent] Tools: ${Object.keys(proxyTools).length} available`);
     
@@ -764,7 +781,7 @@ export class CustomAgent implements ILLMAgent {
       }
     } catch (streamError) {
       // Handle stream processing errors
-      const errorMsg = streamError instanceof Error ? streamError.message : String(streamError);
+      const errorMsg = formatUnknownError(streamError);
       
       // Check if this is a tool validation error (recoverable)
       const isToolValidationError = 
@@ -779,7 +796,7 @@ export class CustomAgent implements ILLMAgent {
         // Emit as error part so caller can handle it (recoverable)
         yield {
           type: 'error',
-          error: streamError instanceof Error ? streamError : new Error(String(streamError)),
+          error: streamError instanceof Error ? streamError : new Error(errorMsg),
         };
       } else {
         // All other errors are fatal - throw immediately
@@ -916,7 +933,7 @@ export class CustomAgent implements ILLMAgent {
       const keyPreview = formatApiKeyPreview(this.config.apiKey);
       getEventSystem().error(EventCategory.LLM, `🔑 [CustomAgent] Error context: provider=${this.config.provider}, model=${this.config.model}, apiKey=${keyPreview}`);
       
-      const errorMessage = streamError?.message || String(streamError);
+      const errorMessage = formatUnknownError(streamError);
       
       // Check if this is a tool validation error
       // According to Vercel AI SDK docs, these should be converted to tool-error parts

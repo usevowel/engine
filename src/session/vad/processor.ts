@@ -90,9 +90,9 @@ export async function processVAD(
           getEventSystem().info(EventCategory.SESSION, `⚡ User interrupt detected - canceling response ${cancelledResponseId}`);
           ws.data.currentResponseId = null;
           
-          // Send response.cancelled event to notify client
-          sendResponseCancelled(ws, cancelledResponseId);
-          getEventSystem().info(EventCategory.SESSION, `📤 Sent response.cancelled for ${cancelledResponseId}`);
+          // OpenAI Realtime cancellation terminates with response.done(status=cancelled).
+          sendResponseCancelled(ws, cancelledResponseId, 'turn_detected');
+          getEventSystem().info(EventCategory.SESSION, `📤 Sent response.done(cancelled) for ${cancelledResponseId}`);
         }
         
         sendSpeechStarted(ws, timestampMs);

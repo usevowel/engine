@@ -138,8 +138,8 @@ export async function handleAudioAppend(ws: ServerWebSocket<SessionData>, event:
               const cancelledResponseId = ws.data.currentResponseId;
               getEventSystem().info(EventCategory.SESSION, `⚡ User interrupt detected - canceling response ${cancelledResponseId}`);
               ws.data.currentResponseId = null;
-              sendResponseCancelled(ws, cancelledResponseId);
-              getEventSystem().info(EventCategory.SESSION, `📤 Sent response.cancelled for ${cancelledResponseId}`);
+              sendResponseCancelled(ws, cancelledResponseId, 'turn_detected');
+              getEventSystem().info(EventCategory.SESSION, `📤 Sent response.done(cancelled) for ${cancelledResponseId}`);
             }
             
             // Send speech_started event to client
@@ -291,9 +291,9 @@ export async function handleAudioAppend(ws: ServerWebSocket<SessionData>, event:
             getEventSystem().info(EventCategory.SESSION, `⚡ User interrupt detected - canceling response ${cancelledResponseId}`);
             ws.data.currentResponseId = null;
             
-            // Send response.cancelled event to notify client
-            sendResponseCancelled(ws, cancelledResponseId);
-            getEventSystem().info(EventCategory.SESSION, `📤 Sent response.cancelled for ${cancelledResponseId}`);
+            // OpenAI Realtime cancellation terminates with response.done(status=cancelled).
+            sendResponseCancelled(ws, cancelledResponseId, 'turn_detected');
+            getEventSystem().info(EventCategory.SESSION, `📤 Sent response.done(cancelled) for ${cancelledResponseId}`);
           }
           
           // Send speech_started event to client

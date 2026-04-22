@@ -6,6 +6,7 @@
 
 export {
   truncateContextSimple,
+  repairToolMessageSequence,
   cleanEllipsisFromMessages,
   createToolCallRepairHandler,
   formatApiKeyPreview,
@@ -19,4 +20,3 @@ export {
   applyReasoningOptions,
   type ReasoningEffort,
 } from './agentUtils';
-

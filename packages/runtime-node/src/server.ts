@@ -427,7 +427,23 @@ wss.on('connection', (ws: WebSocket, _req: IncomingMessage) => {
     })
   );
 
-  if (runtimeSocket.data.config.initial_greeting_prompt) {
+  let initialGreetingHandled = false;
+  let initialGreetingTimer: ReturnType<typeof setTimeout> | undefined;
+  const triggerInitialGreeting = (): void => {
+    if (
+      initialGreetingHandled ||
+      !runtimeSocket.data.config.initial_greeting_prompt ||
+      runtimeSocket.readyState !== 1
+    ) {
+      return;
+    }
+
+    initialGreetingHandled = true;
+    if (initialGreetingTimer) {
+      clearTimeout(initialGreetingTimer);
+      initialGreetingTimer = undefined;
+    }
+
     queueMicrotask(async () => {
       try {
         await handleInitialGreeting(runtimeSocket as any);
@@ -435,7 +451,7 @@ wss.on('connection', (ws: WebSocket, _req: IncomingMessage) => {
         console.error('❌ Initial greeting failed:', error);
       }
     });
-  }
+  };
 
   runtimeSocket.on('message', async (message: RawData) => {
     const text =
@@ -445,10 +461,11 @@ wss.on('connection', (ws: WebSocket, _req: IncomingMessage) => {
           ? message.toString('utf8')
           : Buffer.from(message as ArrayBuffer).toString('utf8');
 
+    let parsedEvent: { type?: string } | null = null;
     if (!isAudioChunkMessage(text)) {
       try {
-        const event = JSON.parse(text) as { type?: string };
-        console.log('📨 Message received:', event.type || text.slice(0, 100));
+        parsedEvent = JSON.parse(text) as { type?: string };
+        console.log('📨 Message received:', parsedEvent.type || text.slice(0, 100));
       } catch {
         console.log('📨 Message received:', text.slice(0, 100));
       }
@@ -456,6 +473,9 @@ wss.on('connection', (ws: WebSocket, _req: IncomingMessage) => {
 
     try {
       await handleMessage(runtimeSocket as any, text);
+      if (parsedEvent?.type === 'session.update') {
+        triggerInitialGreeting();
+      }
     } catch (error) {
       eventSystem.error(
         EventCategory.SESSION,
@@ -467,7 +487,16 @@ wss.on('connection', (ws: WebSocket, _req: IncomingMessage) => {
     }
   });
 
+  if (runtimeSocket.data.config.initial_greeting_prompt) {
+    initialGreetingTimer = setTimeout(triggerInitialGreeting, 250);
+  }
+
   runtimeSocket.on('close', (code, reason) => {
+    if (initialGreetingTimer) {
+      clearTimeout(initialGreetingTimer);
+      initialGreetingTimer = undefined;
+    }
+
     const reasonText = reason.toString();
     console.log('🔌 WebSocket disconnected:', runtimeSocket.data.sessionId, {
       code,

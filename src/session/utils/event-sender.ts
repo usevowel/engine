@@ -248,19 +248,26 @@ export function sendResponseDone(
 }
 
 /**
- * Send response.cancelled event
+ * Send OpenAI-compatible cancellation terminal event.
  */
 export function sendResponseCancelled(
   ws: ServerWebSocket<SessionData>,
-  responseId: string
+  responseId: string,
+  reason: 'client_cancelled' | 'turn_detected' = 'client_cancelled'
 ): void {
   ws.send(JSON.stringify({
-    type: 'response.cancelled',
+    type: 'response.done',
     event_id: generateEventId(),
     response: {
       id: responseId,
       object: 'realtime.response',
       status: 'cancelled',
+      status_details: {
+        type: 'cancelled',
+        reason,
+      },
+      output: [],
+      usage: null,
     },
   }));
 }

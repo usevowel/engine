@@ -66,7 +66,33 @@ import {
   sendAudioDone,
   sendOutputItemDone,
   sendResponseDone,
+  sendResponseCancelled,
 } from '../utils/event-sender';
+
+function formatUnknownError(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message;
+  }
+
+  if (typeof error === 'string') {
+    return error;
+  }
+
+  if (error && typeof error === 'object') {
+    const message = (error as { message?: unknown }).message;
+    if (typeof message === 'string' && message.length > 0) {
+      return message;
+    }
+
+    try {
+      return JSON.stringify(error);
+    } catch {
+      return String(error);
+    }
+  }
+
+  return String(error);
+}
 
 /**
  * Generate AI response with streaming TTS and tool support
@@ -572,6 +598,7 @@ export async function generateResponse(ws: ServerWebSocket<SessionData>, options
     let toolCalled = false;
     let serverToolCalled = false; // Track if a server tool (like setLanguage) was called
     let llmFirstTokenReceived = false;
+    let responseFinalized = false;
     /** Token usage from LLM provider (captured from usage events) */
     let tokenUsage: { promptTokens?: number; completionTokens?: number; totalTokens?: number } | null = null;
 
@@ -595,6 +622,16 @@ export async function generateResponse(ws: ServerWebSocket<SessionData>, options
       };
 
       getEventSystem().warn(category, `🔬 [Response Debug] ${stage} :: ${JSON.stringify(details)}`);
+    };
+
+    const finalizeCancelledResponse = (reason: 'client_cancelled' | 'turn_detected' = 'client_cancelled'): void => {
+      if (responseFinalized) {
+        return;
+      }
+
+      responseFinalized = true;
+      sendResponseCancelled(ws, responseId, reason);
+      getEventSystem().info(EventCategory.SESSION, `📤 Sent response.done(cancelled) for ${responseId}`);
     };
     
     // Stream LLM response with tool support
@@ -734,6 +771,7 @@ export async function generateResponse(ws: ServerWebSocket<SessionData>, options
           reason: 'currentResponseId mismatch at stream loop top',
         });
         latency.responseEnd = Date.now();
+        finalizeCancelledResponse();
         return;
       }
       
@@ -820,6 +858,7 @@ export async function generateResponse(ws: ServerWebSocket<SessionData>, options
                 chunkLength: chunkToSynthesize.length,
                 reason: 'currentResponseId mismatch during text chunking',
               }, EventCategory.AUDIO);
+              finalizeCancelledResponse();
               return;
             }
 
@@ -883,6 +922,7 @@ export async function generateResponse(ws: ServerWebSocket<SessionData>, options
                 chunkLength: chunkToSynthesize.length,
                 reason: 'currentResponseId mismatch after TTS synthesis',
               }, EventCategory.AUDIO);
+              finalizeCancelledResponse();
               return;
             }
 
@@ -904,6 +944,7 @@ export async function generateResponse(ws: ServerWebSocket<SessionData>, options
                   synthesizedAudioChunkCount: audioChunks.length,
                   reason: 'currentResponseId mismatch during audio streaming',
                 }, EventCategory.AUDIO);
+                finalizeCancelledResponse();
                 return;
               }
 
@@ -1193,7 +1234,7 @@ export async function generateResponse(ws: ServerWebSocket<SessionData>, options
       } else if (part.type === 'error') {
         // Handle error parts from the stream
         const streamError = part.error;
-        const errorMessage = streamError instanceof Error ? streamError.message : String(streamError);
+        const errorMessage = formatUnknownError(streamError);
         
         getEventSystem().critical(EventCategory.LLM, `🚨 [Response Generation] Stream error part received: ${errorMessage}`);
         getEventSystem().error(EventCategory.LLM, `🔍 Error details:`, streamError);
@@ -1296,6 +1337,7 @@ export async function generateResponse(ws: ServerWebSocket<SessionData>, options
             synthesizedAudioChunkCount: audioChunks.length,
             reason: 'currentResponseId mismatch during buffered audio streaming',
           }, EventCategory.AUDIO);
+          finalizeCancelledResponse();
           return;
         }
         
@@ -1323,6 +1365,7 @@ export async function generateResponse(ws: ServerWebSocket<SessionData>, options
       
       // Mark response as incomplete (waiting for tool output)
       sendResponseDone(ws, responseId, 'incomplete', [], null);
+      responseFinalized = true;
       
       return;
     }
@@ -1424,6 +1467,7 @@ export async function generateResponse(ws: ServerWebSocket<SessionData>, options
               synthesizedAudioChunkCount: audioChunks.length,
               reason: 'currentResponseId mismatch during final audio streaming',
             }, EventCategory.AUDIO);
+            finalizeCancelledResponse();
             return;
           }
           
@@ -1617,6 +1661,7 @@ export async function generateResponse(ws: ServerWebSocket<SessionData>, options
     
     // Send response.done
     sendResponseDone(ws, responseId, 'completed', [outputItem], null);
+    responseFinalized = true;
     
     // Reset tool retry count on successful response
     if (data.toolRetryCount !== undefined || data.lastToolError !== undefined) {
@@ -1746,7 +1791,10 @@ export async function generateResponse(ws: ServerWebSocket<SessionData>, options
     
     // Send response.done event
     // This tells the SDK the response is complete and resets #ongoingResponse = false
-    sendResponseDone(ws, responseId, 'completed', outputItem ? [outputItem] : [], null);
+    if (!responseFinalized) {
+      sendResponseDone(ws, responseId, 'completed', outputItem ? [outputItem] : [], null);
+      responseFinalized = true;
+    }
     getEventSystem().info(EventCategory.SESSION, `✅ Response complete: ${responseId}`);
     
     // Reset tool retry count on successful response
@@ -2024,6 +2072,8 @@ export async function generateResponse(ws: ServerWebSocket<SessionData>, options
       }, 100);
     }
   } finally {
-    data.currentResponseId = null;
+    if (data.currentResponseId === responseId) {
+      data.currentResponseId = null;
+    }
   }
 }
