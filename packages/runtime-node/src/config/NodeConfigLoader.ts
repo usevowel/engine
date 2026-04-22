@@ -41,6 +41,13 @@ function buildSTTConfigFromEnv(provider: string): unknown {
           ? parseInt(env.DEEPGRAM_STT_SAMPLE_RATE, 10)
           : 16000,
       };
+    case 'grok':
+      return {
+        apiKey: env.GROK_API_KEY || '',
+        model: env.GROK_STT_MODEL || 'whisper-large-v3-turbo',
+        language: env.GROK_STT_LANGUAGE || 'en-US',
+        sampleRate: env.GROK_STT_SAMPLE_RATE ? parseInt(env.GROK_STT_SAMPLE_RATE, 10) : 16000,
+      };
     case 'openai-compatible':
       return {
         apiKey: env.ECHOLINE_API_KEY || '',

@@ -53,6 +53,7 @@ export function mergeR2ConfigIntoEnv(env: EnvLike, config: EngineConfig): EnvLik
       'FENNEC_API_KEY',
       'POLAR_API_KEY',
       'POSTHOG_API_KEY',
+      'GROK_API_KEY',
     ];
     for (const key of secretKeys) {
       const yamlValue = (secrets as Record<string, string>)[key];

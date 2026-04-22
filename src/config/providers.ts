@@ -39,6 +39,18 @@ export const DeepgramTTSConfig = z.object({
   encoding: z.string().default('linear16'),
 });
 
+/**
+ * xAI Grok speech-to-text (Whisper-class streaming + REST batch).
+ *
+ * @see https://docs.x.ai/docs/guides/speech-to-text
+ */
+export const GrokSTTConfig = z.object({
+  apiKey: z.string().min(1, 'Grok API key is required'),
+  model: z.string().default('whisper-large-v3-turbo'),
+  language: z.string().default('en-US'),
+  sampleRate: z.number().default(16000),
+});
+
 export const OpenAICompatibleSTTConfig = z.object({
   apiKey: z.string().optional(),
   baseUrl: z.string().url().default('http://localhost:8000/v1'),

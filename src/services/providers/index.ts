@@ -18,6 +18,7 @@ export { BaseVADProvider } from './base/BaseVADProvider';
 // STT Providers (non-ONNX only)
 export { GroqWhisperSTT } from '../../../packages/provider-groq-whisper-stt/src';
 export { MistralVoxtralRealtimeSTT } from '../../../packages/provider-mistral-voxtral-realtime-stt/src';
+export { GrokSTT } from '../../../packages/provider-grok-stt/src';
 
 // VAD Providers (non-ONNX only)
 // NOTE: SileroVADProvider is NOT exported here to avoid ONNX Runtime imports in Workers

@@ -11,6 +11,7 @@ import { GroqWhisperSTT } from '../../../packages/provider-groq-whisper-stt/src'
 import { MistralVoxtralRealtimeSTT } from '../../../packages/provider-mistral-voxtral-realtime-stt/src';
 import { DeepgramSTT } from '../../../packages/provider-deepgram-stt/src';
 import { DeepgramTTS } from '../../../packages/provider-deepgram-tts/src';
+import { GrokSTT } from '../../../packages/provider-grok-stt/src';
 import { OpenAICompatibleSTT } from './OpenAICompatibleSTT';
 import { OpenAICompatibleTTS } from './OpenAICompatibleTTS';
 import {
@@ -18,6 +19,7 @@ import {
   MistralVoxtralRealtimeConfig,
   DeepgramSTTConfig,
   DeepgramTTSConfig,
+  GrokSTTConfig,
   OpenAICompatibleSTTConfig,
   OpenAICompatibleTTSConfig,
 } from '../../config/providers';
@@ -107,6 +109,27 @@ export function registerOSSProviders(): void {
     configSchema: OpenAICompatibleSTTConfig,
     factory: (config) => {
       return new OpenAICompatibleSTT(config);
+    },
+  });
+
+  ProviderRegistry.registerSTT({
+    name: 'grok',
+    category: 'stt',
+    capabilities: {
+      supportsStreaming: true,
+      supportsVAD: false,
+      supportsLanguageDetection: true,
+      supportsMultipleVoices: false,
+      requiresNetwork: true,
+      supportsGPU: false,
+    },
+    configSchema: GrokSTTConfig,
+    factory: (config) => {
+      return new GrokSTT(config.apiKey, {
+        model: config.model,
+        language: config.language,
+        sampleRate: config.sampleRate,
+      });
     },
   });
 

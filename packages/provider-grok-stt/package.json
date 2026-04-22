@@ -1,0 +1,11 @@
+{
+  "name": "@vowel/provider-grok-stt",
+  "version": "0.1.0",
+  "description": "Grok STT provider for vowel engine",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  }
+}
