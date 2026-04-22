@@ -104,6 +104,7 @@ export interface SessionData {
   };
   languageDetectionService?: any; // LanguageDetectionService instance
   // Language voice preferences
+  initialVoice?: string; // Voice selected when the session started or was explicitly configured
   languageVoiceMap?: Record<string, string>; // Preferred voices per language from token config
   lastVoicePerLanguage?: Record<string, string>; // Last used voice per language (runtime tracking)
   // Groq reasoning effort (from env or token)

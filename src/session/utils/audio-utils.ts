@@ -106,7 +106,7 @@ export async function ensureLanguageForTTS(
     }
 
     // Select appropriate voice for the new language
-    const initialVoice = sessionData.config?.voice;
+    const initialVoice = sessionData.initialVoice || sessionData.config?.voice;
     const currentVoice = sessionData.config?.voice;
     const languageVoiceMap = sessionData.languageVoiceMap;
     const lastVoicePerLanguage = sessionData.lastVoicePerLanguage;
@@ -114,7 +114,7 @@ export async function ensureLanguageForTTS(
     const newVoice = selectVoiceForLanguageChange(
       detectedLanguage,
       initialVoice,
-      initialVoice || 'Ashley', // Fallback to initial voice or default
+      initialVoice || currentVoice || 'Ashley', // Fallback to configured/current voice or default
       currentVoice,
       languageVoiceMap,
       lastVoicePerLanguage

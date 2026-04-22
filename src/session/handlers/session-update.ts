@@ -135,6 +135,7 @@ export async function handleSessionUpdate(ws: ServerWebSocket<SessionData>, even
     if (event.session.voice) {
       event.session.voice = validateVoice(event.session.voice);
       getEventSystem().info(EventCategory.SESSION, `🎤 Voice changed: ${data.config.voice} → ${event.session.voice}`);
+      data.initialVoice = event.session.voice;
     }
     
     // Update language if provided
@@ -164,6 +165,16 @@ export async function handleSessionUpdate(ws: ServerWebSocket<SessionData>, even
         getEventSystem().info(EventCategory.SESSION, `🌍 Language changed: ${data.language.configured || 'none'} → ${languageCode}`);
       } else {
         getEventSystem().warn(EventCategory.SESSION, `⚠️  Invalid language code: ${(event.session as any).language}`);
+      }
+    }
+
+    if (event.session.voice) {
+      const configuredLanguage = data.language?.configured || data.language?.current;
+      if (configuredLanguage) {
+        if (!data.lastVoicePerLanguage) {
+          data.lastVoicePerLanguage = {};
+        }
+        data.lastVoicePerLanguage[configuredLanguage.toLowerCase()] = event.session.voice;
       }
     }
     

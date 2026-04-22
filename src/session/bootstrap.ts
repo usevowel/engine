@@ -189,7 +189,10 @@ export function buildSessionConfig(
         (env.LANGUAGE_DETECTION_ENABLED !== undefined ? env.LANGUAGE_DETECTION_ENABLED === 'true' : true),
     },
     languageVoiceMap: tokenLanguageVoiceMap,
-    lastVoicePerLanguage: {},
+    initialVoice: defaultVoice,
+    lastVoicePerLanguage: tokenLanguage
+      ? { [tokenLanguage.toLowerCase()]: defaultVoice }
+      : {},
     agentConfig,
     groqReasoningEffort: env.GROQ_REASONING_EFFORT
       ? (() => {

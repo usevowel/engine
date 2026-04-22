@@ -143,7 +143,7 @@ Respond with the detected language code (e.g., "en" for English, "es" for Spanis
         }
 
         // Select appropriate voice for the language
-        const initialVoice = sessionData.config?.voice;
+        const initialVoice = sessionData.initialVoice || sessionData.config?.voice;
         const currentVoice = sessionData.config?.voice;
         const languageVoiceMap = sessionData.languageVoiceMap;
         const lastVoicePerLanguage = sessionData.lastVoicePerLanguage;
@@ -151,7 +151,7 @@ Respond with the detected language code (e.g., "en" for English, "es" for Spanis
         const newVoice = selectVoiceForLanguageChange(
           normalizedCode,
           initialVoice,
-          initialVoice || 'Ashley', // Fallback to initial voice or default
+          initialVoice || currentVoice || 'Ashley', // Fallback to configured/current voice or default
           currentVoice,
           languageVoiceMap,
           lastVoicePerLanguage

@@ -248,7 +248,7 @@ export async function executeSetLanguageTool(
   // 1. Last used voice for this language (session memory)
   // 2. Token config preferred voice for this language
   // 3. Gender-based selection (maintains gender from initial voice)
-  const initialVoice = sessionData.config?.voice;
+  const initialVoice = sessionData.initialVoice || sessionData.config?.voice;
   const currentVoice = sessionData.config?.voice;
   const languageVoiceMap = sessionData.languageVoiceMap;
   const lastVoicePerLanguage = sessionData.lastVoicePerLanguage;
@@ -256,7 +256,7 @@ export async function executeSetLanguageTool(
   const newVoice = selectVoiceForLanguageChange(
     normalizedCode,
     initialVoice,
-    initialVoice || 'Ashley', // Fallback to initial voice or default
+    initialVoice || currentVoice || 'Ashley', // Fallback to configured/current voice or default
     currentVoice,
     languageVoiceMap,
     lastVoicePerLanguage
