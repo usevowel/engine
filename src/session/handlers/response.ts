@@ -9,7 +9,6 @@ import type { SessionData } from '../types';
 
 import { getEventSystem, EventCategory } from '../../events';
 import { sendResponseCancelled } from '../utils/event-sender';
-import { sendError } from '../utils/errors';
 // Forward declaration - will be imported from response/index.ts
 let generateResponse: (ws: ServerWebSocket<SessionData>, options?: any) => Promise<void>;
 
@@ -74,8 +73,7 @@ export async function handleResponseCancel(ws: ServerWebSocket<SessionData>, eve
   const responseId = requestedResponseId ?? data.currentResponseId;
 
   if (requestedResponseId && requestedResponseId !== data.currentResponseId) {
-    sendError(ws, 'invalid_request_error', `No in-progress response found for response_id ${requestedResponseId}`);
-    getEventSystem().warn(EventCategory.SESSION, `⚠️ Response cancellation requested for non-active response: ${requestedResponseId}`);
+    getEventSystem().warn(EventCategory.SESSION, `⚠️ Ignoring stale response.cancel for non-active response: ${requestedResponseId}`);
     return;
   }
   
@@ -90,6 +88,5 @@ export async function handleResponseCancel(ws: ServerWebSocket<SessionData>, eve
     return;
   }
   
-  sendError(ws, 'invalid_request_error', 'No response is currently in progress');
-  getEventSystem().warn(EventCategory.SESSION, '⚠️ Response cancellation requested with no active response');
+  getEventSystem().warn(EventCategory.SESSION, '⚠️ Ignoring response.cancel with no active response');
 }
