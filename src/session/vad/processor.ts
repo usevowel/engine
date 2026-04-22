@@ -7,7 +7,8 @@
 import { ServerWebSocket } from 'bun';
 import { generateEventId, generateItemId } from '../../lib/protocol';
 import { SessionManager } from '../SessionManager';
-import { sendResponseCancelled, sendSpeechStarted, sendSpeechStopped } from '../utils/event-sender';
+import { sendSpeechStarted, sendSpeechStopped } from '../utils/event-sender';
+import { cancelActiveResponseTurn } from '../response/response-turn-scope';
 import type { SessionData } from '../types';
 
 import { getEventSystem, EventCategory } from '../../events';
@@ -84,16 +85,8 @@ export async function processVAD(
         // Update last speech time for idle detection
         ws.data.lastSpeechTime = Date.now();
         
-        // Interrupt any ongoing response
-        if (ws.data.currentResponseId) {
-          const cancelledResponseId = ws.data.currentResponseId;
-          getEventSystem().info(EventCategory.SESSION, `⚡ User interrupt detected - canceling response ${cancelledResponseId}`);
-          ws.data.currentResponseId = null;
-          
-          // OpenAI Realtime cancellation terminates with response.done(status=cancelled).
-          sendResponseCancelled(ws, cancelledResponseId, 'turn_detected');
-          getEventSystem().info(EventCategory.SESSION, `📤 Sent response.done(cancelled) for ${cancelledResponseId}`);
-        }
+        // Interrupt any ongoing response (aborts local turn scope + deduped cancel event)
+        cancelActiveResponseTurn(ws, 'turn_detected');
         
         sendSpeechStarted(ws, timestampMs);
       } else if (event === 'speech_end') {

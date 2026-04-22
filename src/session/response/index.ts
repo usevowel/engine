@@ -66,8 +66,8 @@ import {
   sendAudioDone,
   sendOutputItemDone,
   sendResponseDone,
-  sendResponseCancelled,
 } from '../utils/event-sender';
+import { tryEmitResponseCancelled } from './response-turn-scope';
 
 function formatUnknownError(error: unknown): string {
   if (error instanceof Error) {
@@ -99,6 +99,11 @@ function formatUnknownError(error: unknown): string {
  */
 export async function generateResponse(ws: ServerWebSocket<SessionData>, options?: any): Promise<void> {
   const data = ws.data;
+  // End any in-flight turn so the previous `generateResponse` stream observes
+  // this scope's `AbortSignal` on the next chunk (replaces ad-hoc id equality checks).
+  data.responseTurnAbort?.abort();
+  const turnAbort = new AbortController();
+  data.responseTurnAbort = turnAbort;
   const responseId = generateResponseId();
   data.currentResponseId = responseId;
 
@@ -610,6 +615,7 @@ export async function generateResponse(ws: ServerWebSocket<SessionData>, options
       const details = {
         responseId,
         currentResponseId: data.currentResponseId,
+        turnAborted: turnAbort.signal.aborted,
         itemId,
         fullTextLength: fullText.length,
         audioStarted,
@@ -630,8 +636,7 @@ export async function generateResponse(ws: ServerWebSocket<SessionData>, options
       }
 
       responseFinalized = true;
-      sendResponseCancelled(ws, responseId, reason);
-      getEventSystem().info(EventCategory.SESSION, `📤 Sent response.done(cancelled) for ${responseId}`);
+      tryEmitResponseCancelled(ws, responseId, reason);
     };
     
     // Stream LLM response with tool support
@@ -763,12 +768,15 @@ export async function generateResponse(ws: ServerWebSocket<SessionData>, options
     }
     
     for await (const part of llmStream) {
-      // Check if cancelled
-      if (data.currentResponseId !== responseId) {
-        getEventSystem().warn(EventCategory.SESSION, `⚠️ Response cancelled: currentResponseId=${data.currentResponseId}, responseId=${responseId}`);
+      // Turn scope cancelled (VAD, client cancel, or superseded by a newer response)
+      if (turnAbort.signal.aborted) {
+        getEventSystem().warn(
+          EventCategory.SESSION,
+          `⚠️ Response turn aborted: responseId=${responseId}`,
+        );
         logResponseDebug('early return before processing LLM part', {
           partType: part.type,
-          reason: 'currentResponseId mismatch at stream loop top',
+          reason: 'turn aborted at stream loop top',
         });
         latency.responseEnd = Date.now();
         finalizeCancelledResponse();
@@ -852,11 +860,11 @@ export async function generateResponse(ws: ServerWebSocket<SessionData>, options
             const chunkToSynthesize = filteredChunk;
 
             // Check if response was cancelled (interrupt) - stop immediately before TTS synthesis
-            if (data.currentResponseId !== responseId) {
+            if (turnAbort.signal.aborted) {
               getEventSystem().info(EventCategory.AUDIO, `⚡ Response ${responseId} cancelled during text chunking - stopping TTS`);
               logResponseDebug('early return before streaming TTS synthesis', {
                 chunkLength: chunkToSynthesize.length,
-                reason: 'currentResponseId mismatch during text chunking',
+                reason: 'turn aborted during text chunking',
               }, EventCategory.AUDIO);
               finalizeCancelledResponse();
               return;
@@ -915,12 +923,12 @@ export async function generateResponse(ws: ServerWebSocket<SessionData>, options
             }
 
             // Check again after TTS synthesis completes (interrupt may have occurred during synthesis)
-            if (data.currentResponseId !== responseId) {
+            if (turnAbort.signal.aborted) {
               getEventSystem().info(EventCategory.AUDIO, `⚡ Response ${responseId} cancelled after TTS synthesis - discarding audio`);
               logResponseDebug('early return after streaming TTS synthesis', {
                 synthesizedAudioChunkCount: audioChunks.length,
                 chunkLength: chunkToSynthesize.length,
-                reason: 'currentResponseId mismatch after TTS synthesis',
+                reason: 'turn aborted after TTS synthesis',
               }, EventCategory.AUDIO);
               finalizeCancelledResponse();
               return;
@@ -937,12 +945,12 @@ export async function generateResponse(ws: ServerWebSocket<SessionData>, options
 
             // Stream audio chunks
             for (const chunk of audioChunks) {
-              if (data.currentResponseId !== responseId) {
+              if (turnAbort.signal.aborted) {
                 getEventSystem().info(EventCategory.AUDIO, `⚡ Response ${responseId} cancelled during audio streaming - stopping`);
                 logResponseDebug('early return during streaming audio delta send', {
                   pendingChunkBytes: chunk.byteLength,
                   synthesizedAudioChunkCount: audioChunks.length,
-                  reason: 'currentResponseId mismatch during audio streaming',
+                  reason: 'turn aborted during audio streaming',
                 }, EventCategory.AUDIO);
                 finalizeCancelledResponse();
                 return;
@@ -1331,11 +1339,11 @@ export async function generateResponse(ws: ServerWebSocket<SessionData>, options
       
       // Stream audio chunks
       for (const chunk of audioChunks) {
-        if (data.currentResponseId !== responseId) {
+        if (turnAbort.signal.aborted) {
           logResponseDebug('early return during buffered audio delta send', {
             pendingChunkBytes: chunk.byteLength,
             synthesizedAudioChunkCount: audioChunks.length,
-            reason: 'currentResponseId mismatch during buffered audio streaming',
+            reason: 'turn aborted during buffered audio streaming',
           }, EventCategory.AUDIO);
           finalizeCancelledResponse();
           return;
@@ -1461,11 +1469,11 @@ export async function generateResponse(ws: ServerWebSocket<SessionData>, options
         sendAudioTranscriptDelta(ws, responseId, itemId, chunkToSynthesize);
         
         for (const chunk of audioChunks) {
-          if (data.currentResponseId !== responseId) {
+          if (turnAbort.signal.aborted) {
             logResponseDebug('early return during final audio delta send', {
               pendingChunkBytes: chunk.byteLength,
               synthesizedAudioChunkCount: audioChunks.length,
-              reason: 'currentResponseId mismatch during final audio streaming',
+              reason: 'turn aborted during final audio streaming',
             }, EventCategory.AUDIO);
             finalizeCancelledResponse();
             return;
@@ -2074,6 +2082,9 @@ export async function generateResponse(ws: ServerWebSocket<SessionData>, options
   } finally {
     if (data.currentResponseId === responseId) {
       data.currentResponseId = null;
+    }
+    if (data.responseTurnAbort === turnAbort) {
+      data.responseTurnAbort = null;
     }
   }
 }

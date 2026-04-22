@@ -173,6 +173,7 @@ export function buildSessionConfig(
     conversationHistory: [],
     currentTraceId: sessionId,
     currentResponseId: null,
+    responseTurnAbort: null,
     vadEnabled,
     audioBufferStartMs: 0,
     totalAudioMs: 0,

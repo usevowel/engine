@@ -8,7 +8,7 @@ import { ServerWebSocket } from 'bun';
 import type { SessionData } from '../types';
 
 import { getEventSystem, EventCategory } from '../../events';
-import { sendResponseCancelled } from '../utils/event-sender';
+import { cancelActiveResponseTurn } from '../response/response-turn-scope';
 // Forward declaration - will be imported from response/index.ts
 let generateResponse: (ws: ServerWebSocket<SessionData>, options?: any) => Promise<void>;
 
@@ -70,23 +70,18 @@ export async function handleResponseCreate(ws: ServerWebSocket<SessionData>, eve
 export async function handleResponseCancel(ws: ServerWebSocket<SessionData>, event: any): Promise<void> {
   const data = ws.data;
   const requestedResponseId = typeof event?.response_id === 'string' ? event.response_id : null;
-  const responseId = requestedResponseId ?? data.currentResponseId;
 
   if (requestedResponseId && requestedResponseId !== data.currentResponseId) {
     getEventSystem().warn(EventCategory.SESSION, `⚠️ Ignoring stale response.cancel for non-active response: ${requestedResponseId}`);
     return;
   }
-  
-  // Mark current response as cancelled
-  if (responseId && data.currentResponseId === responseId) {
-    data.currentResponseId = null;
-  }
 
-  if (responseId) {
-    sendResponseCancelled(ws, responseId, 'client_cancelled');
-    getEventSystem().warn(EventCategory.SESSION, `⚠️ Response cancellation requested: ${responseId}`);
+  if (!data.currentResponseId) {
+    getEventSystem().warn(EventCategory.SESSION, '⚠️ Ignoring response.cancel with no active response');
     return;
   }
-  
-  getEventSystem().warn(EventCategory.SESSION, '⚠️ Ignoring response.cancel with no active response');
+
+  const cancelledId = data.currentResponseId;
+  cancelActiveResponseTurn(ws, 'client_cancelled');
+  getEventSystem().warn(EventCategory.SESSION, `⚠️ Response cancellation applied: ${cancelledId}`);
 }

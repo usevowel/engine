@@ -40,6 +40,7 @@ function createTestContext(sessionData: Partial<SessionData> = {}): ServerToolCo
       audioBuffer: null,
       conversationHistory: [],
       currentResponseId: null,
+      responseTurnAbort: null,
       vadEnabled: false,
       audioBufferStartMs: 0,
       totalAudioMs: 0,

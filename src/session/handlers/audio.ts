@@ -16,8 +16,8 @@ import {
   sendConversationItemCreated,
   sendTranscriptionCompleted,
   sendAudioBufferCleared,
-  sendResponseCancelled
 } from '../utils/event-sender';
+import { cancelActiveResponseTurn } from '../response/response-turn-scope';
 import { trackSilenceStart, clearSilenceTracking, shouldHibernate, enterHibernation, exitHibernation } from '../utils/hibernation';
 import { processVAD } from '../vad/processor';
 import type { SessionData } from '../types';
@@ -133,14 +133,8 @@ export async function handleAudioAppend(ws: ServerWebSocket<SessionData>, event:
             // Update last speech time for idle detection
             ws.data.lastSpeechTime = Date.now();
             
-            // Interrupt any ongoing response
-            if (ws.data.currentResponseId) {
-              const cancelledResponseId = ws.data.currentResponseId;
-              getEventSystem().info(EventCategory.SESSION, `⚡ User interrupt detected - canceling response ${cancelledResponseId}`);
-              ws.data.currentResponseId = null;
-              sendResponseCancelled(ws, cancelledResponseId, 'turn_detected');
-              getEventSystem().info(EventCategory.SESSION, `📤 Sent response.done(cancelled) for ${cancelledResponseId}`);
-            }
+            // Interrupt any ongoing response (aborts local turn scope + deduped cancel event)
+            cancelActiveResponseTurn(ws, 'turn_detected');
             
             // Send speech_started event to client
             sendSpeechStarted(ws, data.totalAudioMs);
@@ -285,16 +279,8 @@ export async function handleAudioAppend(ws: ServerWebSocket<SessionData>, event:
           // Update last speech time for idle detection
           ws.data.lastSpeechTime = Date.now();
           
-          // Interrupt any ongoing response
-          if (ws.data.currentResponseId) {
-            const cancelledResponseId = ws.data.currentResponseId;
-            getEventSystem().info(EventCategory.SESSION, `⚡ User interrupt detected - canceling response ${cancelledResponseId}`);
-            ws.data.currentResponseId = null;
-            
-            // OpenAI Realtime cancellation terminates with response.done(status=cancelled).
-            sendResponseCancelled(ws, cancelledResponseId, 'turn_detected');
-            getEventSystem().info(EventCategory.SESSION, `📤 Sent response.done(cancelled) for ${cancelledResponseId}`);
-          }
+          // Interrupt any ongoing response (aborts local turn scope + deduped cancel event)
+          cancelActiveResponseTurn(ws, 'turn_detected');
           
           // Send speech_started event to client
           sendSpeechStarted(ws, data.totalAudioMs);

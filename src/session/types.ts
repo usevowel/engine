@@ -38,6 +38,19 @@ export interface SessionData {
   audioBuffer: Uint8Array | null;
   conversationHistory: ConversationItem[];
   currentResponseId: string | null;
+  /**
+   * AbortController for the in-flight assistant turn. Aborted when the turn is
+   * cancelled, superseded by a new response, or cleared by the same paths that
+   * clear `currentResponseId`. Stream work checks `responseTurnAbort.signal` instead
+   * of re-comparing `currentResponseId` to the local `responseId`.
+   */
+  responseTurnAbort: AbortController | null;
+  /**
+   * Deduplicate `response.done(cancelled)` if both an external interrupt
+   * (VAD, client cancel) and the in-response consumer observe the end of the
+   * same `responseId`.
+   */
+  responseCancelEventSentForIds?: Set<string>;
   vadEnabled: boolean;
   audioBufferStartMs: number;
   totalAudioMs: number;

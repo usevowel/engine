@@ -74,7 +74,10 @@ export async function executeSpeakTool(
   
   // Stream audio chunks
   for (const chunk of audioChunks) {
-    if (sessionData.currentResponseId !== responseId) {
+    const turnInvalid =
+      sessionData.currentResponseId !== responseId ||
+      (sessionData.responseTurnAbort?.signal.aborted ?? false);
+    if (turnInvalid) {
       getEventSystem().info(EventCategory.AUDIO, `⚡ Response ${responseId} cancelled during audio streaming - stopping`);
       return { success: false, error: 'Response cancelled' };
     }
