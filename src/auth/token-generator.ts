@@ -158,6 +158,16 @@ export interface TokenGenerationOptions {
   
   /** Provider configuration for STT, TTS, and VAD */
   providerConfig?: ProviderConfig;
+
+  /**
+   * STT override embedded in the JWT. Supports a flat shape from dev clients, or
+   * `{ provider, config }` as produced by self-hosted Core (`buildSpeechProviderConfig`).
+   */
+  stt?: { provider: string; config?: Record<string, unknown> } & Record<string, unknown>;
+  /**
+   * TTS override embedded in the JWT. Same shape options as `stt`.
+   */
+  tts?: { provider: string; config?: Record<string, unknown> } & Record<string, unknown>;
 }
 
 /**
@@ -204,6 +214,9 @@ export interface TokenPayload {
   
   // Provider Configuration
   providerConfig?: ProviderConfig;
+
+  stt?: { provider: string; config?: Record<string, unknown> } & Record<string, unknown>;
+  tts?: { provider: string; config?: Record<string, unknown> } & Record<string, unknown>;
   
   // JWT standard fields
   iat: number;
@@ -294,10 +307,13 @@ export async function generateEphemeralToken(
   
   // Provider configuration
   if (options.providerConfig) payload.providerConfig = options.providerConfig;
+
+  if (options.stt) payload.stt = options.stt;
+  if (options.tts) payload.tts = options.tts;
   
   // Pass through ALL additional options as custom claims (even unsupported ones)
   // This ensures forward compatibility - any custom params make it through to the token
-  const knownKeys = ['expiresInMs', 'preset', 'model', 'voice', 'speakingRate', 'initialGreetingPrompt', 'instructions', 'maxCallDurationMs', 'maxIdleDurationMs', 'llmProvider', 'openrouterProvider', 'openrouterSiteUrl', 'openrouterAppName', 'agentConfig', 'turnDetection', 'language', 'languageDetection', 'languageVoiceMap', 'sessionKey', 'sessionId', 'providerConfig'];
+  const knownKeys = ['expiresInMs', 'preset', 'model', 'voice', 'speakingRate', 'initialGreetingPrompt', 'instructions', 'maxCallDurationMs', 'maxIdleDurationMs', 'llmProvider', 'openrouterProvider', 'openrouterSiteUrl', 'openrouterAppName', 'agentConfig', 'turnDetection', 'language', 'languageDetection', 'languageVoiceMap', 'sessionKey', 'sessionId', 'providerConfig', 'stt', 'tts'];
   for (const [key, value] of Object.entries(options)) {
     if (!knownKeys.includes(key) && value !== undefined) {
       payload[key] = value;
