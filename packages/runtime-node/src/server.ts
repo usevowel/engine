@@ -231,7 +231,67 @@ async function createSessionData(req: IncomingMessage): Promise<SessionData> {
   const payload = await verifyToken(token);
 
   // Extract provider config from token payload for per-session override
-  const tokenProviderConfig = payload.providerConfig;
+  const tokenProviderConfig = payload.providerConfig as
+    | {
+        stt?: { provider: string; config?: Record<string, unknown> };
+        tts?: { provider: string; config?: Record<string, unknown> };
+        vad?: { provider: string; config?: Record<string, unknown> };
+      }
+    | undefined;
+
+  /** Top-level JWT `stt` / `tts` blocks (hosted + engine token passthrough), merged with `providerConfig`. */
+  const sttJwt = payload.stt as { provider?: string; config?: Record<string, unknown> } | undefined;
+  const ttsJwt = payload.tts as { provider?: string; config?: Record<string, unknown> } | undefined;
+
+  const sttBlock =
+    tokenProviderConfig?.stt?.provider != null
+      ? tokenProviderConfig.stt
+      : sttJwt?.provider != null
+        ? { provider: sttJwt.provider, config: sttJwt.config }
+        : undefined;
+
+  const ttsBlock =
+    tokenProviderConfig?.tts?.provider != null
+      ? tokenProviderConfig.tts
+      : ttsJwt?.provider != null
+        ? { provider: ttsJwt.provider, config: ttsJwt.config }
+        : undefined;
+
+  const effectiveProviderConfig = {
+    stt: sttBlock
+      ? {
+          provider: sttBlock.provider,
+          config: {
+            ...(runtimeConfig.providers.stt.config as Record<string, unknown>),
+            ...(sttBlock.config ?? {}),
+          },
+        }
+      : runtimeConfig.providers.stt,
+    tts: ttsBlock
+      ? {
+          provider: ttsBlock.provider,
+          config: {
+            ...(runtimeConfig.providers.tts.config as Record<string, unknown>),
+            ...(ttsBlock.config ?? {}),
+          },
+        }
+      : runtimeConfig.providers.tts,
+    vad: tokenProviderConfig?.vad?.provider
+      ? {
+          provider: tokenProviderConfig.vad.provider,
+          enabled: runtimeConfig.providers.vad.enabled,
+          config: {
+            ...(runtimeConfig.providers.vad.config as Record<string, unknown> | undefined),
+            ...(tokenProviderConfig.vad.config ?? {}),
+          },
+        }
+      : runtimeConfig.providers.vad,
+  };
+
+  const mergedRuntimeConfig: NodeRuntimeConfig = {
+    ...runtimeConfig,
+    providers: effectiveProviderConfig,
+  };
 
   const sessionId =
     (typeof payload.sub === 'string' && payload.sub) ||
@@ -239,12 +299,12 @@ async function createSessionData(req: IncomingMessage): Promise<SessionData> {
     generateSessionId();
   const model = typeof payload.model === 'string' ? payload.model : runtimeConfig.llm.model;
 
-  const ttsConfig = tokenProviderConfig?.tts?.config ?? runtimeConfig.providers.tts.config as Record<string, unknown> | undefined;
+  const ttsConfig = effectiveProviderConfig.tts.config as Record<string, unknown> | undefined;
   const envLike = {
     DEFAULT_VOICE: ttsConfig?.voice,
-    STT_PROVIDER: tokenProviderConfig?.stt?.provider ?? runtimeConfig.providers.stt.provider,
-    VAD_PROVIDER: tokenProviderConfig?.vad?.provider ?? runtimeConfig.providers.vad.provider,
-    VAD_ENABLED: String(runtimeConfig.providers.vad.enabled),
+    STT_PROVIDER: effectiveProviderConfig.stt.provider,
+    VAD_PROVIDER: effectiveProviderConfig.vad.provider,
+    VAD_ENABLED: String(effectiveProviderConfig.vad.enabled),
     POSTHOG_API_KEY: process.env.POSTHOG_API_KEY,
     POSTHOG_ENABLED: process.env.POSTHOG_ENABLED,
     POSTHOG_HOST: process.env.POSTHOG_HOST,
@@ -263,7 +323,7 @@ async function createSessionData(req: IncomingMessage): Promise<SessionData> {
     sessionId,
     model,
     envLike as any,
-    runtimeConfig,
+    mergedRuntimeConfig,
     typeof payload.voice === 'string' ? payload.voice : undefined,
     typeof payload.speakingRate === 'number' ? payload.speakingRate : undefined,
     typeof payload.initialGreetingPrompt === 'string' ? payload.initialGreetingPrompt : undefined,
@@ -302,7 +362,7 @@ async function createSessionData(req: IncomingMessage): Promise<SessionData> {
       : undefined
   );
 
-  sessionData.runtimeConfig = runtimeConfig;
+  sessionData.runtimeConfig = mergedRuntimeConfig;
   sessionData.connectionStartTime = Date.now();
   sessionData.maxCallDurationMs =
     typeof payload.maxCallDurationMs === 'number'
@@ -384,7 +444,7 @@ httpServer.on('upgrade', async (req: IncomingMessage, socket: Socket, head: Buff
     wss.handleUpgrade(req, socket, head, (ws) => {
       const runtimeSocket = ws as RuntimeWebSocket;
       runtimeSocket.data = sessionData;
-      runtimeSocket.runtimeConfig = runtimeConfig;
+      runtimeSocket.runtimeConfig = sessionData.runtimeConfig as NodeRuntimeConfig;
       wss.emit('connection', runtimeSocket, req);
     });
   } catch (error) {

@@ -42,6 +42,14 @@
       "name": "@vowel/provider-deepgram-tts",
       "version": "0.1.0",
     },
+    "packages/provider-grok-stt": {
+      "name": "@vowel/provider-grok-stt",
+      "version": "0.1.0",
+    },
+    "packages/provider-grok-tts": {
+      "name": "@vowel/provider-grok-tts",
+      "version": "0.1.0",
+    },
     "packages/provider-groq-whisper-stt": {
       "name": "@vowel/provider-groq-whisper-stt",
       "version": "0.1.0",
@@ -531,6 +539,10 @@
     "@vowel/provider-deepgram-stt": ["@vowel/provider-deepgram-stt@workspace:packages/provider-deepgram-stt"],
 
     "@vowel/provider-deepgram-tts": ["@vowel/provider-deepgram-tts@workspace:packages/provider-deepgram-tts"],
+
+    "@vowel/provider-grok-stt": ["@vowel/provider-grok-stt@workspace:packages/provider-grok-stt"],
+
+    "@vowel/provider-grok-tts": ["@vowel/provider-grok-tts@workspace:packages/provider-grok-tts"],
 
     "@vowel/provider-groq-whisper-stt": ["@vowel/provider-groq-whisper-stt@workspace:packages/provider-groq-whisper-stt"],
 

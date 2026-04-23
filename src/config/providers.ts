@@ -51,6 +51,21 @@ export const GrokSTTConfig = z.object({
   sampleRate: z.number().default(16000),
 });
 
+/**
+ * xAI Grok text-to-speech (REST + streaming WebSocket).
+ *
+ * Voice IDs are normalized in the GrokTTS provider to xAI presets (`rex`, `leo`, …).
+ * Arbitrary strings fall back to the default voice so hosted env overrides stay valid at runtime.
+ *
+ * @see https://docs.x.ai/docs/guides/text-to-speech
+ */
+export const GrokTTSConfig = z.object({
+  apiKey: z.string().min(1, 'Grok API key is required'),
+  voice: z.string().default('rex'),
+  sampleRate: z.number().default(24000),
+  format: z.enum(['pcm16']).default('pcm16'),
+});
+
 export const OpenAICompatibleSTTConfig = z.object({
   apiKey: z.string().optional(),
   baseUrl: z.string().url().default('http://localhost:8000/v1'),
