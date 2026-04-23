@@ -34,6 +34,8 @@ class GrokStreamingSession implements STTStreamingSession {
   private inSpeech = false;
   private finalText = '';
   private openResolved = false;
+  /** When true, `onFinal` was already invoked for this utterance via `speech_final`; skip duplicate `transcript.done`. */
+  private utteranceFinalizedViaSpeechFinal = false;
 
   constructor(apiKey: string, config: Required<GrokSTTConfig>, callbacks: STTStreamCallbacks) {
     this.callbacks = callbacks;
@@ -134,6 +136,7 @@ class GrokStreamingSession implements STTStreamingSession {
           this.finalText = text;
           if (event.speech_final) {
             getEventSystem().info(EventCategory.STT, `🎤 [Grok STT] Speech ended (speech_end) - final transcript: "${text.substring(0, 50)}${text.length > 50 ? '...' : ''}"`);
+            this.utteranceFinalizedViaSpeechFinal = true;
             void this.callbacks.onFinal({
               text,
               language: languageName ?? this.language,
@@ -156,7 +159,9 @@ class GrokStreamingSession implements STTStreamingSession {
 
       if (event.type === 'transcript.done') {
         const text = event.text ?? this.finalText;
-        if (text) {
+        const alreadyFinalized = this.utteranceFinalizedViaSpeechFinal;
+        this.utteranceFinalizedViaSpeechFinal = false;
+        if (text && !alreadyFinalized) {
           getEventSystem().info(EventCategory.STT, `📝 [Grok STT] Transcript done: "${text.substring(0, 50)}${text.length > 50 ? '...' : ''}"`);
           void this.callbacks.onFinal({
             text,
@@ -233,7 +238,8 @@ export class GrokSTT extends BaseSTTProvider {
     this.apiKey = apiKey;
     this.model = config?.model || 'whisper-large-v3-turbo';
     this.language = config?.language;
-    this.sampleRate = config?.sampleRate || 16000;
+    /** Match engine DEFAULT_AUDIO_CONFIG (24 kHz) so hosted PCM16 matches the declared rate unless overridden. */
+    this.sampleRate = config?.sampleRate ?? 24000;
   }
 
   async initialize(): Promise<void> {

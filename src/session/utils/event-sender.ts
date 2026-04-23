@@ -379,6 +379,26 @@ export function sendTranscriptionCompleted(
 }
 
 /**
+ * Send conversation.item.input_audio_transcription.delta (OpenAI Realtime API / Agents SDK shape).
+ *
+ * @see https://github.com/openai/openai-agents-js — `conversationItemInputAudioTranscriptionDeltaEventSchema`
+ */
+export function sendInputAudioTranscriptionDelta(
+  ws: ServerWebSocket<SessionData>,
+  itemId: string,
+  contentIndex: number,
+  delta: string
+): void {
+  ws.send(JSON.stringify({
+    type: 'conversation.item.input_audio_transcription.delta',
+    event_id: generateEventId(),
+    item_id: itemId,
+    content_index: contentIndex,
+    delta,
+  }));
+}
+
+/**
  * Send session.updated event
  */
 export function sendSessionUpdated(

@@ -48,7 +48,8 @@ export const GrokSTTConfig = z.object({
   apiKey: z.string().min(1, 'Grok API key is required'),
   model: z.string().default('whisper-large-v3-turbo'),
   language: z.string().default('en-US'),
-  sampleRate: z.number().default(16000),
+  /** Align with engine session PCM default (24 kHz) unless the deployment overrides. */
+  sampleRate: z.number().default(24000),
 });
 
 /**

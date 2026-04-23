@@ -15,6 +15,7 @@ import {
   sendSpeechStopped, 
   sendConversationItemCreated,
   sendTranscriptionCompleted,
+  sendInputAudioTranscriptionDelta,
   sendAudioBufferCleared,
 } from '../utils/event-sender';
 import { cancelActiveResponseTurn } from '../response/response-turn-scope';
@@ -22,6 +23,7 @@ import { trackSilenceStart, clearSilenceTracking, shouldHibernate, enterHibernat
 import { processVAD } from '../vad/processor';
 import type { SessionData } from '../types';
 import type { ConversationItem } from '../../lib/protocol';
+import type { STTStreamCallbacks, VADEvent } from '../../types/providers';
 
 import { getEventSystem, EventCategory } from '../../events';
 import { getOrCreateService, getServiceForTrace } from '../../lib/agent-analytics';
@@ -52,6 +54,136 @@ export function setGenerateResponse(fn: typeof generateResponse): void {
   generateResponse = fn;
 }
 
+function getPcmSampleRateHz(data: SessionData): number {
+  return data.runtimeConfig?.audio?.sampleRate ?? 24000;
+}
+
+/**
+ * Derive an append-only delta for OpenAI `input_audio_transcription.delta` from successive full-string partials.
+ */
+function computeStreamingTranscriptDelta(previousFull: string, newFull: string): { delta: string; carry: string } {
+  const prev = previousFull ?? '';
+  const next = newFull ?? '';
+  if (!next) {
+    return { delta: '', carry: prev };
+  }
+  if (next.startsWith(prev)) {
+    return { delta: next.slice(prev.length), carry: next };
+  }
+  if (prev.startsWith(next)) {
+    return { delta: '', carry: prev };
+  }
+  return { delta: next, carry: next };
+}
+
+function beginNewUserTranscriptionItem(data: SessionData): string {
+  const id = generateItemId();
+  data.currentInputTranscriptionItemId = id;
+  data.lastStreamingPartialTranscript = '';
+  return id;
+}
+
+function resetUserTranscriptionStreamingState(data: SessionData): void {
+  data.currentInputTranscriptionItemId = null;
+  data.lastStreamingPartialTranscript = '';
+}
+
+function emitUserTranscriptionDeltaFromFullText(
+  ws: ServerWebSocket<SessionData>,
+  data: SessionData,
+  fullText: string,
+): void {
+  if (!fullText) {
+    return;
+  }
+  if (!data.currentInputTranscriptionItemId) {
+    beginNewUserTranscriptionItem(data);
+  }
+  const itemId = data.currentInputTranscriptionItemId!;
+  const prev = data.lastStreamingPartialTranscript ?? '';
+  const { delta, carry } = computeStreamingTranscriptDelta(prev, fullText);
+  data.lastStreamingPartialTranscript = carry;
+  if (delta) {
+    sendInputAudioTranscriptionDelta(ws, itemId, 0, delta);
+  }
+}
+
+async function handleStreamingSttVadEvent(ws: ServerWebSocket<SessionData>, vadEvent: VADEvent): Promise<void> {
+  const data = ws.data;
+  getEventSystem().info(EventCategory.STT, '🗣️  [STT] VAD event:', { event: String(vadEvent) });
+
+  if (vadEvent === 'speech_start') {
+    getEventSystem().info(EventCategory.VAD, '🗣️  Speech started (integrated VAD)');
+    beginNewUserTranscriptionItem(data);
+
+    if (data.turnTracker) {
+      const turnTracker = data.turnTracker as any;
+      turnTracker.startTurn();
+      turnTracker.trackSTTStart();
+    }
+
+    if (data.posthogConfig?.enabled && data.posthogConfig?.apiKey && data.currentTraceId) {
+      try {
+        if (!data.providers) {
+          data.providers = await SessionManager.getProviders(data.runtimeConfig!);
+        }
+        const traceId = data.currentTraceId;
+        const sttProvider = data.providers!.stt.name || 'unknown';
+        const analyticsService = getOrCreateService(
+          traceId,
+          data.sessionId,
+          {
+            apiKey: data.posthogConfig.apiKey,
+            host: data.posthogConfig.host,
+          },
+          {
+            startTrace: true,
+            spanName: 'voice_turn',
+            inputState: { sttProvider, streaming: true },
+          }
+        );
+        analyticsService.trackSTTStart({
+          sttProvider,
+          audioDurationMs: 0,
+          audioBufferSize: 0,
+        });
+      } catch (error) {
+        getEventSystem().error(EventCategory.STT, 'Failed to create agent analytics service for streaming STT', error instanceof Error ? error : new Error(String(error)));
+      }
+    }
+
+    ws.data.lastSpeechTime = Date.now();
+    cancelActiveResponseTurn(ws, 'turn_detected');
+    sendSpeechStarted(ws, data.totalAudioMs);
+    clearSilenceTracking(data);
+  } else if (vadEvent === 'speech_end') {
+    getEventSystem().info(EventCategory.VAD, '🔇 Speech ended (integrated VAD)');
+    ws.data.speechEndTime = Date.now();
+    sendSpeechStopped(ws, data.totalAudioMs);
+    trackSilenceStart(data);
+  }
+}
+
+function buildStreamingSttCallbacks(ws: ServerWebSocket<SessionData>): STTStreamCallbacks {
+  const data = ws.data;
+  return {
+    onPartial: async (text) => {
+      getEventSystem().info(EventCategory.STT, '📝 [STT] Partial:', { text });
+      emitUserTranscriptionDeltaFromFullText(ws, data, text);
+    },
+    onFinal: async (result) => {
+      getEventSystem().info(EventCategory.STT, '✅ [STT] Final:', { text: result.text });
+      await handleStreamingTranscript(ws, result.text);
+    },
+    onVADEvent: async (event) => {
+      await handleStreamingSttVadEvent(ws, event);
+    },
+    onError: (error) => {
+      getEventSystem().error(EventCategory.STT, '❌ [STT] Error:', error instanceof Error ? error : new Error(String(error)));
+    },
+  };
+}
+
 /**
  * Handle input_audio_buffer.append event
  * 
@@ -78,81 +210,11 @@ export async function handleAudioAppend(ws: ServerWebSocket<SessionData>, event:
         return;
       }
 
-      // Reinitialize STT stream
-      // Use same callbacks as initial STT setup
-      data.sttStream = await data.providers!.stt.startStream({
-        onPartial: (text) => {
-          getEventSystem().info(EventCategory.STT, '📝 [STT] Partial:', { text });
-        },
-        onFinal: async (result) => {
-          getEventSystem().info(EventCategory.STT, '✅ [STT] Final:', { text: result.text });
-          await handleStreamingTranscript(ws, result.text);
-        },
-        onVADEvent: async (event) => {
-          getEventSystem().info(EventCategory.STT, '🗣️  [STT] VAD event:', { event: String(event) });
-          
-          if (event === 'speech_start') {
-            getEventSystem().info(EventCategory.VAD, '🗣️  Speech started (integrated VAD)');
-            
-            // Start turn lifecycle tracking
-            if (data.turnTracker) {
-              const turnTracker = data.turnTracker as any;
-              turnTracker.startTurn();
-              turnTracker.trackSTTStart();
-            }
-            
-            // Create agent analytics service if PostHog is enabled
-            if (data.posthogConfig?.enabled && data.posthogConfig?.apiKey && data.currentTraceId) {
-              try {
-                const traceId = data.currentTraceId;
-                const sttProvider = data.providers!.stt.name || 'unknown';
-                const analyticsService = getOrCreateService(
-                  traceId,
-                  data.sessionId,
-                  {
-                    apiKey: data.posthogConfig.apiKey,
-                    host: data.posthogConfig.host,
-                  },
-                  {
-                    startTrace: true,
-                    spanName: 'voice_turn',
-                    inputState: { sttProvider, streaming: true },
-                  }
-                );
-                
-                analyticsService.trackSTTStart({
-                  sttProvider,
-                  audioDurationMs: 0,
-                  audioBufferSize: 0,
-                });
-              } catch (error) {
-                getEventSystem().error(EventCategory.STT, 'Failed to create agent analytics service for streaming STT', error instanceof Error ? error : new Error(String(error)));
-              }
-            }
-            
-            // Update last speech time for idle detection
-            ws.data.lastSpeechTime = Date.now();
-            
-            // Interrupt any ongoing response (aborts local turn scope + deduped cancel event)
-            cancelActiveResponseTurn(ws, 'turn_detected');
-            
-            // Send speech_started event to client
-            sendSpeechStarted(ws, data.totalAudioMs);
-            
-            // Clear silence tracking on speech start (for hibernation)
-            clearSilenceTracking(data);
-          } else if (event === 'speech_end') {
-            getEventSystem().info(EventCategory.VAD, '🔇 Speech ended (integrated VAD)');
-            ws.data.speechEndTime = Date.now();
-            sendSpeechStopped(ws, data.totalAudioMs);
-            // Start silence tracking on speech end (for hibernation)
-            trackSilenceStart(data);
-          }
-        },
-        onError: (error) => {
-          getEventSystem().error(EventCategory.STT, '❌ [STT] Error:', error instanceof Error ? error : new Error(String(error)));
-        },
-      }, data.tokenTurnDetection as any);
+      // Reinitialize STT stream (same callbacks as initial STT setup)
+      data.sttStream = await data.providers!.stt.startStream(
+        buildStreamingSttCallbacks(ws),
+        data.tokenTurnDetection as any,
+      );
     });
     
     getEventSystem().info(EventCategory.SESSION, '✅ Session resumed from hibernation');
@@ -178,7 +240,8 @@ export async function handleAudioAppend(ws: ServerWebSocket<SessionData>, event:
   if (audioChunk.length < MIN_CHUNK_SIZE) {
     getEventSystem().critical(EventCategory.AUDIO, `❌ CRITICAL: Audio chunk too small! Received ${audioChunk.length} bytes, expected ~${EXPECTED_CHUNK_SIZE} bytes`);
     getEventSystem().error(EventCategory.AUDIO, `   This indicates a bug in the client audio processing.`);
-    getEventSystem().error(EventCategory.AUDIO, `   Chunk size: ${audioChunk.length} bytes (${audioChunk.length / 2} samples, ${(audioChunk.length / 2 / 24000 * 1000).toFixed(1)}ms @ 24kHz)`);
+    const srEarly = getPcmSampleRateHz(data);
+    getEventSystem().error(EventCategory.AUDIO, `   Chunk size: ${audioChunk.length} bytes (${audioChunk.length / 2} samples, ${(audioChunk.length / 2 / srEarly * 1000).toFixed(1)}ms @ ${srEarly}Hz)`);
     
     // Send error to client
     sendError(
@@ -216,122 +279,23 @@ export async function handleAudioAppend(ws: ServerWebSocket<SessionData>, event:
     data.sttStreamInitializing = true;
     
     try {
-      data.sttStream = await data.providers.stt.startStream({
-      onPartial: (text) => {
-        getEventSystem().info(EventCategory.STT, '📝 [STT] Partial:', { text });
-        // Could send partial transcript events here if needed
-      },
-      onFinal: async (result) => {
-        getEventSystem().info(EventCategory.STT, '✅ [STT] Final:', { text: result.text });
-        // Handle final transcript
-        await handleStreamingTranscript(ws, result.text);
-      },
-      onVADEvent: async (event) => {
-        getEventSystem().info(EventCategory.STT, '🗣️  [STT] VAD event:', { event: String(event) });
-        
-        // Handle speech_start from integrated VAD (AssemblyAI, Fennec)
-        if (event === 'speech_start') {
-          getEventSystem().info(EventCategory.VAD, '🗣️  Speech started (integrated VAD)');
-          
-          // Start turn lifecycle tracking
-          if (data.turnTracker) {
-            const turnTracker = data.turnTracker as any; // Avoid circular deps
-            turnTracker.startTurn();
-            turnTracker.trackSTTStart();
-          }
-          
-          // Use session ID as trace ID (set during session initialization)
-          // Create agent analytics service if PostHog is enabled and service doesn't exist yet
-          if (data.posthogConfig?.enabled && data.posthogConfig?.apiKey && data.currentTraceId) {
-            try {
-              // Get providers if not already loaded
-              if (!data.providers) {
-                data.providers = await SessionManager.getProviders(data.runtimeConfig!);
-              }
-              
-              const traceId = data.currentTraceId; // Use session ID as trace ID
-              const sttProvider = data.providers.stt.name || 'unknown';
-              const analyticsService = getOrCreateService(
-                traceId,
-                data.sessionId,
-                {
-                  apiKey: data.posthogConfig.apiKey,
-                  host: data.posthogConfig.host,
-                },
-                {
-                  startTrace: true, // Start trace automatically when service is created
-                  spanName: 'voice_turn',
-                  inputState: { sttProvider, streaming: true },
-                }
-              );
-              
-              // Track STT start (for streaming STT, we track when speech starts)
-              analyticsService.trackSTTStart({
-                sttProvider,
-                audioDurationMs: 0, // Unknown for streaming (will be tracked when complete)
-                audioBufferSize: 0, // Unknown for streaming
-              });
-            } catch (error) {
-              getEventSystem().error(EventCategory.STT, 'Failed to create agent analytics service for streaming STT', error instanceof Error ? error : new Error(String(error)));
-            }
-          }
-          
-          // Update last speech time for idle detection
-          ws.data.lastSpeechTime = Date.now();
-          
-          // Interrupt any ongoing response (aborts local turn scope + deduped cancel event)
-          cancelActiveResponseTurn(ws, 'turn_detected');
-          
-          // Send speech_started event to client
-          sendSpeechStarted(ws, data.totalAudioMs);
-          
-          // Clear silence tracking on speech start (for hibernation)
-          clearSilenceTracking(data);
-        } else if (event === 'speech_end') {
-          getEventSystem().info(EventCategory.VAD, '🔇 Speech ended (integrated VAD)');
-          
-          // Track speech end time for TTFS calculation
-          ws.data.speechEndTime = Date.now();
-          
-          // Send speech_stopped event to client
-          sendSpeechStopped(ws, data.totalAudioMs);
-          
-          // Start silence tracking on speech end (for hibernation)
-          trackSilenceStart(data);
-        }
-      },
-      onError: (error) => {
-        getEventSystem().error(EventCategory.STT, '❌ [STT] Error:', error instanceof Error ? error : new Error(String(error)));
-      },
-    }, data.tokenTurnDetection as any); // Pass turn detection config from token
+      data.sttStream = await data.providers.stt.startStream(
+        buildStreamingSttCallbacks(ws),
+        data.tokenTurnDetection as any,
+      );
     } finally {
       // Always clear the initializing flag, even if startStream fails
       data.sttStreamInitializing = false;
     }
   }
   
-  // Send audio to streaming STT if active
+  // Send audio to streaming STT (wait for connection so early mic audio is not dropped)
   if (data.sttStream) {
-    // Note: Audio continues to be sent even during AI response for interrupt detection
-    if (data.sttStream.isActive()) {
-      try {
-        await data.sttStream.sendAudio(audioChunk);
-      } catch (error) {
-        getEventSystem().error(EventCategory.STT, '❌ Failed to send audio to STT stream:', error instanceof Error ? error : new Error(String(error)));
-      }
-    } else {
-      // STT stream is still connecting - this is normal for first few chunks
-      // Audio will be processed once connection is established
-      if (data.totalAudioMs < 1000) {
-        // Only log once during initial connection (first second)
-        if (!data.sttConnectionWarningLogged) {
-          getEventSystem().info(EventCategory.STT, '⏳ [STT] Waiting for streaming connection to complete...');
-          data.sttConnectionWarningLogged = true;
-        }
-      } else {
-        // If not active after 1 second, something is wrong
-        getEventSystem().warn(EventCategory.STT, '⚠️  STT stream exists but is not active after 1s - cannot send audio');
-      }
+    try {
+      await data.sttStream.waitForConnection?.();
+      await data.sttStream.sendAudio(audioChunk);
+    } catch (error) {
+      getEventSystem().error(EventCategory.STT, '❌ Failed to send audio to STT stream:', error instanceof Error ? error : new Error(String(error)));
     }
   } else if (shouldUseStreamingSTT(data)) {
     getEventSystem().warn(EventCategory.STT, '⚠️  No STT stream - audio not being sent to streaming provider');
@@ -345,8 +309,9 @@ export async function handleAudioAppend(ws: ServerWebSocket<SessionData>, event:
     data.audioBuffer = concatenateAudio([data.audioBuffer, audioChunk]);
   }
   
-  // Update total audio time
-  const chunkDurationMs = (audioChunk.length / 2 / 24000) * 1000; // PCM16 24kHz
+  // Update total audio time (PCM16 mono — sample rate from runtime config)
+  const sr = getPcmSampleRateHz(data);
+  const chunkDurationMs = (audioChunk.length / 2 / sr) * 1000;
   data.totalAudioMs += chunkDurationMs;
   
   // If VAD is enabled and not integrated, process audio for speech detection
@@ -369,7 +334,7 @@ export async function handleStreamingTranscript(ws: ServerWebSocket<SessionData>
     const turnTracker = data.turnTracker as any; // Avoid circular deps
     turnTracker.trackSTTComplete();
   }
-  const itemId = generateItemId();
+  const itemId = data.currentInputTranscriptionItemId ?? generateItemId();
   
   // Use session ID as trace ID (should be set during session initialization)
   const traceId = data.currentTraceId || data.sessionId;
@@ -480,6 +445,8 @@ export async function handleStreamingTranscript(ws: ServerWebSocket<SessionData>
   
   // Send transcription completed (use cleaned transcript)
   sendTranscriptionCompleted(ws, itemId, 0, cleanedTranscript);
+
+  resetUserTranscriptionStreamingState(data);
   
   // Clear audio buffer
   data.audioBuffer = null;
@@ -526,7 +493,8 @@ export async function handleAudioCommit(ws: ServerWebSocket<SessionData>, event:
     }
     
     const sttProvider = data.providers.stt.name || 'unknown';
-    const audioDurationMs = (audioBuffer.length / 2 / 24000) * 1000;
+    const srCommit = getPcmSampleRateHz(data);
+    const audioDurationMs = (audioBuffer.length / 2 / srCommit) * 1000;
     const audioDurationSec = audioDurationMs / 1000;
     
     // Use session ID as trace ID (should be set during session initialization)

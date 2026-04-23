@@ -147,6 +147,13 @@ export interface SessionData {
   }; // Last tool validation error for retry context
   // Empty response retry tracking (when server tool called but no text generated)
   emptyResponseRetryCount?: number; // Current retry count for empty responses after server tool calls
+  /**
+   * Conversation item id for the in-flight streaming user utterance.
+   * Pairs `conversation.item.input_audio_transcription.delta` events with the final `.completed` event (OpenAI Realtime shape).
+   */
+  currentInputTranscriptionItemId?: string | null;
+  /** Last full partial transcript text from the STT provider (used to derive append-only deltas for the client). */
+  lastStreamingPartialTranscript?: string;
   // Initial greeting tracking (prevents duplicate greetings after DO hibernation)
   initialGreetingTriggered?: boolean; // True if initial greeting has been triggered (prevents duplicates)
   greetingInProgress?: boolean; // True if greeting generation is currently in progress (guards hibernation race condition)

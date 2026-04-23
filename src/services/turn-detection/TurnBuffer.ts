@@ -41,6 +41,23 @@ export interface TurnBufferConfig {
 export type TurnFinalizeCallback = (text: string) => void;
 
 /**
+ * Merge a new STT fragment into accumulated text.
+ * Providers may send cumulative full transcripts, non-cumulative pieces, or
+ * shorter corrections — handle the common cases without dropping middle words.
+ */
+export function mergeTranscriptFragments(accumulated: string, next: string): string {
+  const a = accumulated.trim();
+  const b = next.trim();
+  if (!a) return b;
+  if (!b) return a;
+  if (b.startsWith(a) || b === a) return b;
+  if (a.startsWith(b)) return a;
+  if (a.includes(b)) return a;
+  if (b.includes(a)) return b;
+  return `${a} ${b}`.trim();
+}
+
+/**
  * Metrics for turn detection performance (Layer 4)
  */
 export interface TurnBufferMetrics {
@@ -118,10 +135,10 @@ export class TurnBuffer {
       this.accumulatedText = trimmedText;
       this.log('🎤 Turn started', { text: trimmedText });
     } else {
-      // Accumulate with space separator
-      this.accumulatedText = trimmedText;
+      this.accumulatedText = mergeTranscriptFragments(this.accumulatedText, trimmedText);
       this.log('📝 Transcript accumulated', {
-        text: trimmedText,
+        fragment: trimmedText,
+        merged: this.accumulatedText,
         totalLength: this.accumulatedText.length,
       });
     }
