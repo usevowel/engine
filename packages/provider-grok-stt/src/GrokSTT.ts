@@ -118,6 +118,7 @@ class GrokStreamingSession implements STTStreamingSession {
       if (event.type === 'transcript.partial') {
         if (!this.inSpeech) {
           this.inSpeech = true;
+          this.utteranceFinalizedViaSpeechFinal = false;
           getEventSystem().info(EventCategory.STT, '🎤 [Grok STT] Speech detected (speech_start)');
           void this.callbacks.onVADEvent?.('speech_start');
         }
