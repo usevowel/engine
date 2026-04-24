@@ -14,9 +14,15 @@ import { createServer, type IncomingMessage, type ServerResponse } from 'node:ht
 import type { Socket } from 'node:net';
 import { WebSocketServer, type RawData, type WebSocket } from 'ws';
 import type { SessionData } from '../../../src/session/types';
+import { SessionDebugDumpManager } from '../../../src/session/utils/session-debug-dump-manager';
 import { getEventSystem, EventCategory } from '../../../src/events';
 import { generateEphemeralToken, verifyToken } from './auth/token-generator';
-import { NodeConfigLoader, type NodeRuntimeConfig } from './config/NodeConfigLoader';
+import {
+  NodeConfigLoader,
+  buildSTTConfigFromEnv,
+  buildTTSConfigFromEnv,
+  type NodeRuntimeConfig,
+} from './config/NodeConfigLoader';
 import { handleInitialGreeting, handleMessage } from '../../../src/session/handler';
 import { SessionManager } from '../../../src/session/SessionManager';
 import { generateEventId, generateSessionId } from '../../../src/lib/protocol';
@@ -172,6 +178,32 @@ function redactToken(token: string | null): string {
   return `${token.slice(0, 8)}...${token.slice(-8)}`;
 }
 
+/**
+ * Merge token `config` onto env-derived provider config without letting the JWT
+ * wipe server-side API keys: hosted/token payloads often include `apiKey: ""`.
+ *
+ * **Important:** `baseConfig` must match the **effective** `stt`/`tts` `provider` (from the JWT).
+ * If the token selects `grok` while env defaults are `groq-whisper` / `deepgram`, callers must
+ * pass {@link buildSTTConfigFromEnv} / {@link buildTTSConfigFromEnv} for that provider — not the
+ * loader’s default-provider config — so the correct env secret (e.g. `GROK_API_KEY`) is used.
+ *
+ * @param baseConfig - Values from {@link buildSTTConfigFromEnv} / {@link buildTTSConfigFromEnv}
+ * @param tokenConfig - Optional `stt`/`tts` `config` from JWT (may contain empty strings)
+ */
+function mergeProviderConfigFromToken(
+  baseConfig: Record<string, unknown>,
+  tokenConfig: Record<string, unknown> | undefined
+): Record<string, unknown> {
+  const override = { ...(tokenConfig ?? {}) };
+  const ak = override.apiKey;
+  if (ak === null || ak === undefined) {
+    delete override.apiKey;
+  } else if (typeof ak === 'string' && ak.trim() === '') {
+    delete override.apiKey;
+  }
+  return { ...baseConfig, ...override };
+}
+
 function extractTokenFromHeaders(headers: IncomingMessage['headers']): string | null {
   const authHeader = getHeaderValue(headers, 'authorization');
   if (authHeader) {
@@ -261,19 +293,19 @@ async function createSessionData(req: IncomingMessage): Promise<SessionData> {
     stt: sttBlock
       ? {
           provider: sttBlock.provider,
-          config: {
-            ...(runtimeConfig.providers.stt.config as Record<string, unknown>),
-            ...(sttBlock.config ?? {}),
-          },
+          config: mergeProviderConfigFromToken(
+            buildSTTConfigFromEnv(sttBlock.provider) as Record<string, unknown>,
+            sttBlock.config
+          ),
         }
       : runtimeConfig.providers.stt,
     tts: ttsBlock
       ? {
           provider: ttsBlock.provider,
-          config: {
-            ...(runtimeConfig.providers.tts.config as Record<string, unknown>),
-            ...(ttsBlock.config ?? {}),
-          },
+          config: mergeProviderConfigFromToken(
+            buildTTSConfigFromEnv(ttsBlock.provider) as Record<string, unknown>,
+            ttsBlock.config
+          ),
         }
       : runtimeConfig.providers.tts,
     vad: tokenProviderConfig?.vad?.provider
@@ -566,6 +598,15 @@ wss.on('connection', (ws: WebSocket, _req: IncomingMessage) => {
       sessionId: runtimeSocket.data.sessionId,
       code,
       reason: reasonText,
+    });
+
+    void SessionDebugDumpManager.finalizeSessionDumps(runtimeSocket.data).catch((e) => {
+      eventSystem.error(
+        EventCategory.STT,
+        '⚠️ Session debug dumps finalize failed',
+        e instanceof Error ? e : new Error(String(e)),
+        { sessionId: runtimeSocket.data.sessionId },
+      );
     });
   });
 

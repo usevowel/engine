@@ -6,11 +6,30 @@
 
 import type { SessionConfig, ConversationItem } from '../lib/protocol';
 import type { SessionProviders } from './SessionManager';
-import type { STTStreamingSession } from '../types/providers';
+import type { STTStreamingSession, StreamingSttProviderDebugRecord } from '../types/providers';
 import type { RuntimeConfig } from '../config/RuntimeConfig';
 import type { SoundbirdAgent } from '../services/agent-provider';
 import type { ILLMAgent } from '../services/agents';
 import type { SessionTurnTracker } from './turn-tracker';
+
+export interface InterruptPolicyConfig {
+  mode?: 'immediate' | 'confirm_before_cancel';
+  minSpeechMs?: number;
+  maxPendingMs?: number;
+  minWordsWhileAssistantSpeaking?: number;
+  ignoreBackchannels?: boolean;
+  backchannels?: string[];
+}
+
+export interface PendingInterruptState {
+  responseId: string;
+  startedAt: number;
+  audioStartMs?: number;
+  source: string;
+  transcript: string;
+  confirmTimer?: ReturnType<typeof setTimeout>;
+  maxTimer?: ReturnType<typeof setTimeout>;
+}
 
 /**
  * Latency metrics for a single response
@@ -51,6 +70,8 @@ export interface SessionData {
    * same `responseId`.
    */
   responseCancelEventSentForIds?: Set<string>;
+  interruptPolicy?: InterruptPolicyConfig;
+  pendingInterrupt?: PendingInterruptState | null;
   vadEnabled: boolean;
   audioBufferStartMs: number;
   totalAudioMs: number;
@@ -154,6 +175,27 @@ export interface SessionData {
   currentInputTranscriptionItemId?: string | null;
   /** Last full partial transcript text from the STT provider (used to derive append-only deltas for the client). */
   lastStreamingPartialTranscript?: string;
+  /**
+   * When non-null, PCM16 mic chunks for the current streaming STT utterance are
+   * accumulated for optional `STT_AUDIO_DEBUG` on-disk WAV export (Bun/Node only).
+   */
+  sttStreamingDebugPcm?: Uint8Array | null;
+  /**
+   * When non-null, **all** PCM16 chunks successfully passed to `sttStream.sendAudio`
+   * for this WebSocket session (per-turn + continuous). Written as a single WAV on
+   * disconnect when `STT_AUDIO_DEBUG` is enabled (see `stt-audio-debug.ts`).
+   */
+  sttStreamingSessionDebugPcm?: Uint8Array | null;
+  /**
+   * Append-only log of inbound streaming STT WebSocket messages for this connection
+   * when `STT_STREAM_EVENTS_DEBUG` is enabled (written as one formatted JSON file on close).
+   */
+  sttStreamProviderDebugEvents?: StreamingSttProviderDebugRecord[];
+  /**
+   * PCM16 chunks successfully sent to streaming STT while `STT_STREAM_EVENTS_DEBUG` is on,
+   * used for a reference **whole-session** Groq Whisper transcript embedded in that JSON dump.
+   */
+  sttStreamEventsDebugSessionPcm?: Uint8Array | null;
   // Initial greeting tracking (prevents duplicate greetings after DO hibernation)
   initialGreetingTriggered?: boolean; // True if initial greeting has been triggered (prevents duplicates)
   greetingInProgress?: boolean; // True if greeting generation is currently in progress (guards hibernation race condition)

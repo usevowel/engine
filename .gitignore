@@ -64,6 +64,9 @@ Thumbs.db
 
 debug_*.wav
 
+# Local STT debug dumps (STT_AUDIO_DEBUG=1, Bun/Node only)
+.audio-debug/
+
 # Voice models and assets
 voices/*.onnx
 voices/*.onnx.json

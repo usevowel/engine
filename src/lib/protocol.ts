@@ -16,6 +16,15 @@ export interface TurnDetection {
   interrupt_response?: boolean;    // Allow responses to be interrupted
 }
 
+export interface InterruptPolicyConfig {
+  mode?: 'immediate' | 'confirm_before_cancel';
+  minSpeechMs?: number;
+  maxPendingMs?: number;
+  minWordsWhileAssistantSpeaking?: number;
+  ignoreBackchannels?: boolean;
+  backchannels?: string[];
+}
+
 /**
  * Session Configuration
  */
@@ -29,6 +38,7 @@ export interface SessionConfig {
     model?: string;
   };
   turn_detection?: TurnDetection | null;
+  interrupt_policy?: InterruptPolicyConfig;
   tools?: any[];
   tool_choice?: string;
   temperature?: number;

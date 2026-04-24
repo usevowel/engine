@@ -45,7 +45,12 @@ export const DeepgramTTSConfig = z.object({
  * @see https://docs.x.ai/docs/guides/speech-to-text
  */
 export const GrokSTTConfig = z.object({
-  apiKey: z.string().min(1, 'Grok API key is required'),
+  apiKey: z
+    .string()
+    .min(
+      1,
+      'GROK_API_KEY is required when STT_PROVIDER=grok (xAI Grok speech — not the same as GROQ_API_KEY)'
+    ),
   model: z.string().default('whisper-large-v3-turbo'),
   language: z.string().default('en-US'),
   /** Align with engine session PCM default (24 kHz) unless the deployment overrides. */
@@ -61,7 +66,12 @@ export const GrokSTTConfig = z.object({
  * @see https://docs.x.ai/docs/guides/text-to-speech
  */
 export const GrokTTSConfig = z.object({
-  apiKey: z.string().min(1, 'Grok API key is required'),
+  apiKey: z
+    .string()
+    .min(
+      1,
+      'GROK_API_KEY is required when TTS_PROVIDER=grok (xAI Grok speech — not the same as GROQ_API_KEY)'
+    ),
   voice: z.string().default('rex'),
   sampleRate: z.number().default(24000),
   format: z.enum(['pcm16']).default('pcm16'),

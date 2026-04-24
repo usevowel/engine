@@ -74,30 +74,23 @@ function writeString(view: DataView, offset: number, string: string): void {
  * @param language Optional language code (e.g., 'en')
  * @param apiKey Groq API key (optional, falls back to global config for Bun)
  * @param whisperModel Whisper model name (optional, defaults to 'whisper-large-v3')
+ * @param sampleRateHz PCM sample rate for the WAV wrapper (default 24000)
  * @returns Transcription result
  */
 export async function transcribeAudio(
   audioBuffer: Uint8Array,
   language?: string,
   apiKey?: string,
-  whisperModel?: string
+  whisperModel?: string,
+  sampleRateHz: number = 24000,
 ): Promise<TranscriptionResult> {
   try {
     // Get API key and model - use provided values or fall back to global config (Bun only)
     let groqApiKey = apiKey;
-    let groqWhisperModel = whisperModel || 'whisper-large-v3';
+    let groqWhisperModel = whisperModel || config.groq?.whisperModel || 'whisper-large-v3';
     
     if (!groqApiKey) {
-      // Fallback to global config for Bun environments
-      try {
-        const { config: globalConfig } = require('../config/env');
-        groqApiKey = globalConfig?.groq?.apiKey;
-        if (!groqWhisperModel && globalConfig?.groq?.whisperModel) {
-          groqWhisperModel = globalConfig.groq.whisperModel;
-        }
-      } catch {
-        // Workers environment - API key must be provided
-      }
+      groqApiKey = config.groq?.apiKey;
     }
     
     if (!groqApiKey) {
@@ -105,8 +98,12 @@ export async function transcribeAudio(
     }
     
     // Convert PCM16 to proper WAV file with header
-    getEventSystem().info(EventCategory.AUDIO, `📝 Creating WAV file from ${audioBuffer.length} bytes of PCM16 data (${(audioBuffer.length / 2 / 24000).toFixed(2)}s at 24kHz)`);
-    const wavFile = createWavFile(audioBuffer, 24000, 1);
+    const sr = Number.isFinite(sampleRateHz) && sampleRateHz > 0 ? sampleRateHz : 24000;
+    getEventSystem().info(
+      EventCategory.AUDIO,
+      `📝 Creating WAV file from ${audioBuffer.length} bytes of PCM16 data (${(audioBuffer.length / 2 / sr).toFixed(2)}s at ${sr}Hz)`,
+    );
+    const wavFile = createWavFile(audioBuffer, sr, 1);
     getEventSystem().info(EventCategory.LLM, `📝 WAV file created: ${wavFile.length} bytes total`);
     
     // Create form data with audio file

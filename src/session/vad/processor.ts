@@ -8,7 +8,7 @@ import { ServerWebSocket } from 'bun';
 import { generateEventId, generateItemId } from '../../lib/protocol';
 import { SessionManager } from '../SessionManager';
 import { sendSpeechStarted, sendSpeechStopped } from '../utils/event-sender';
-import { cancelActiveResponseTurn } from '../response/response-turn-scope';
+import { handleInterruptSpeechEnd, handleInterruptSpeechStart } from '../interrupt/InterruptManager';
 import type { SessionData } from '../types';
 
 import { getEventSystem, EventCategory } from '../../events';
@@ -85,8 +85,8 @@ export async function processVAD(
         // Update last speech time for idle detection
         ws.data.lastSpeechTime = Date.now();
         
-        // Interrupt any ongoing response (aborts local turn scope + deduped cancel event)
-        cancelActiveResponseTurn(ws, 'turn_detected');
+        // Start a provisional interrupt for any ongoing response.
+        handleInterruptSpeechStart(ws, 'server_vad', timestampMs);
         
         sendSpeechStarted(ws, timestampMs);
       } else if (event === 'speech_end') {
@@ -94,6 +94,7 @@ export async function processVAD(
         
         // Track speech end time for TTFS calculation
         ws.data.speechEndTime = Date.now();
+        handleInterruptSpeechEnd(ws, 'server_vad');
         
         sendSpeechStopped(ws, timestampMs);
         

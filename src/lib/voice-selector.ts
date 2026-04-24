@@ -13,6 +13,20 @@ import {
 } from '../config/tts-voices';
 import { getEventSystem, EventCategory } from '../events';
 
+/**
+ * xAI Grok TTS voice IDs (lowercase). Must match `SUPPORTED_GROK_VOICES` in `packages/provider-grok-tts`.
+ * Grok is multilingual per voice: language is passed separately; do not map through Inworld per-locale lists.
+ */
+const GROK_TTS_VOICE_IDS = new Set(['ara', 'eve', 'leo', 'rex', 'sal']);
+const GROK_TTS_DEFAULT_VOICE = 'rex';
+
+function isGrokTtsVoiceId(voice: string | null | undefined): boolean {
+  if (!voice) {
+    return false;
+  }
+  return GROK_TTS_VOICE_IDS.has(voice.toLowerCase());
+}
+
 export interface VoiceSelectorImplementation {
   detectVoiceGender: (voiceId: string) => VoiceGender | null;
   selectVoiceForLanguage: (
@@ -187,6 +201,7 @@ export function getGenderPreferenceFromVoice(initialVoice: string | null | undef
  * @param currentVoice - Optional current voice to check if it's already appropriate
  * @param languageVoiceMap - Optional map of language codes to preferred voices from token config
  * @param lastVoicePerLanguage - Optional map of language codes to last used voices (runtime tracking)
+ * @param ttsProvider - When `"grok"`, uses xAI Grok voice IDs only (no Inworld per-locale lists).
  * @returns Selected voice ID for the new language
  */
 export function selectVoiceForLanguageChange(
@@ -195,30 +210,84 @@ export function selectVoiceForLanguageChange(
   fallbackVoice: string = 'Ashley',
   currentVoice?: string | null,
   languageVoiceMap?: Record<string, string>,
-  lastVoicePerLanguage?: Record<string, string>
+  lastVoicePerLanguage?: Record<string, string>,
+  ttsProvider?: string
 ): string {
   const normalizedLang = newLanguage.toLowerCase();
-  
+  const isGrok = ttsProvider === 'grok';
+
+  if (isGrok) {
+    if (lastVoicePerLanguage && lastVoicePerLanguage[normalizedLang]) {
+      const last = lastVoicePerLanguage[normalizedLang];
+      if (isGrokTtsVoiceId(last)) {
+        const v = last.toLowerCase();
+        getEventSystem().info(
+          EventCategory.TTS,
+          `🎤 [Grok TTS] Using last voice for ${newLanguage} from session memory: ${v}`
+        );
+        return v;
+      }
+    }
+    if (languageVoiceMap && languageVoiceMap[normalizedLang]) {
+      const preferred = languageVoiceMap[normalizedLang];
+      if (isGrokTtsVoiceId(preferred)) {
+        const v = preferred.toLowerCase();
+        getEventSystem().info(
+          EventCategory.TTS,
+          `🎤 [Grok TTS] Using preferred voice for ${newLanguage} from token config: ${v}`
+        );
+        return v;
+      }
+    }
+    if (isGrokTtsVoiceId(currentVoice)) {
+      const v = currentVoice!.toLowerCase();
+      getEventSystem().info(
+        EventCategory.TTS,
+        `🎤 [Grok TTS] Keeping current Grok voice for ${newLanguage}: ${v}`
+      );
+      return v;
+    }
+    if (isGrokTtsVoiceId(initialVoice)) {
+      const v = initialVoice!.toLowerCase();
+      getEventSystem().info(
+        EventCategory.TTS,
+        `🎤 [Grok TTS] Using initial Grok voice for ${newLanguage}: ${v}`
+      );
+      return v;
+    }
+    getEventSystem().info(
+      EventCategory.TTS,
+      `🎤 [Grok TTS] No valid Grok voice in memory, using default: ${GROK_TTS_DEFAULT_VOICE}`
+    );
+    return GROK_TTS_DEFAULT_VOICE;
+  }
+
+  // --- Non-Grok: Inworld / generic voice selection ---
+
   // Priority 1: Check if this language was used before and has a last voice (session memory)
   if (lastVoicePerLanguage && lastVoicePerLanguage[normalizedLang]) {
     const lastVoice = lastVoicePerLanguage[normalizedLang];
-    getEventSystem().info(EventCategory.TTS, 
-      `🎤 Using last voice for ${newLanguage} from session memory: ${lastVoice}`);
+    getEventSystem().info(
+      EventCategory.TTS,
+      `🎤 Using last voice for ${newLanguage} from session memory: ${lastVoice}`
+    );
     return lastVoice;
   }
-  
+
   // Priority 2: Check token config for preferred voice for this language
   if (languageVoiceMap && languageVoiceMap[normalizedLang]) {
     const preferredVoice = languageVoiceMap[normalizedLang];
-    getEventSystem().info(EventCategory.TTS, 
-      `🎤 Using preferred voice for ${newLanguage} from token config: ${preferredVoice}`);
+    getEventSystem().info(
+      EventCategory.TTS,
+      `🎤 Using preferred voice for ${newLanguage} from token config: ${preferredVoice}`
+    );
     return preferredVoice;
   }
-  
+
   // Priority 3: Use gender-based selection
   // Detect gender preference from initial voice
   const genderPreference = getGenderPreferenceFromVoice(initialVoice);
-  
+
   // Select appropriate voice for new language, checking if current voice is already appropriate
   return selectVoiceForLanguage(newLanguage, genderPreference, fallbackVoice, currentVoice);
 }

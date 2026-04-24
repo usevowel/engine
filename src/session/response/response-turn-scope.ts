@@ -58,6 +58,13 @@ export function cancelActiveResponseTurn(
     EventCategory.SESSION,
     `⚡ Cancelling active response turn ${id} (${reason})`,
   );
+  if (data.pendingInterrupt?.confirmTimer) {
+    clearTimeout(data.pendingInterrupt.confirmTimer);
+  }
+  if (data.pendingInterrupt?.maxTimer) {
+    clearTimeout(data.pendingInterrupt.maxTimer);
+  }
+  data.pendingInterrupt = null;
   data.responseTurnAbort?.abort();
   data.responseTurnAbort = null;
   data.currentResponseId = null;

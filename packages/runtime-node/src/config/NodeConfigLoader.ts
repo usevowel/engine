@@ -14,7 +14,11 @@ import { ProviderRegistry } from '../../../../src/services/providers/ProviderReg
 
 export interface NodeRuntimeConfig extends RuntimeConfig {}
 
-function buildSTTConfigFromEnv(provider: string): unknown {
+/**
+ * Build STT provider `config` from `process.env` for the given registered provider name.
+ * Used by {@link NodeConfigLoader} and JWT session merge when the token overrides `stt.provider`.
+ */
+export function buildSTTConfigFromEnv(provider: string): unknown {
   const env = process.env;
   switch (provider) {
     case 'groq-whisper':
@@ -63,7 +67,11 @@ function buildSTTConfigFromEnv(provider: string): unknown {
   }
 }
 
-function buildTTSConfigFromEnv(provider: string): unknown {
+/**
+ * Build TTS provider `config` from `process.env` for the given registered provider name.
+ * Used by {@link NodeConfigLoader} and JWT session merge when the token overrides `tts.provider`.
+ */
+export function buildTTSConfigFromEnv(provider: string): unknown {
   const env = process.env;
   switch (provider) {
     case 'deepgram':
@@ -85,6 +93,15 @@ function buildTTSConfigFromEnv(provider: string): unknown {
           ? parseInt(env.ECHOLINE_TTS_SAMPLE_RATE, 10)
           : 24000,
         responseFormat: (env.ECHOLINE_TTS_RESPONSE_FORMAT || 'wav') as 'wav' | 'mp3',
+      };
+    case 'grok':
+      return {
+        apiKey: env.GROK_API_KEY || '',
+        voice: env.GROK_TTS_VOICE || env.DEFAULT_VOICE || 'rex',
+        sampleRate: env.GROK_TTS_SAMPLE_RATE
+          ? parseInt(env.GROK_TTS_SAMPLE_RATE, 10)
+          : 24000,
+        format: 'pcm16' as const,
       };
     default:
       return {};

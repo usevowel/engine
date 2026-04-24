@@ -7,6 +7,7 @@ import {
   STTTranscribeOptions,
 } from '../../../src/types/providers';
 import { getEventSystem, EventCategory } from '../../../src/events';
+import { TurnBuffer, type TurnBufferConfig } from '../../../src/services/turn-detection/TurnBuffer';
 
 interface GrokSTTConfig {
   apiKey: string;
@@ -34,13 +35,23 @@ class GrokStreamingSession implements STTStreamingSession {
   private inSpeech = false;
   private finalText = '';
   private openResolved = false;
+  private turnBuffer: TurnBuffer;
   /** When true, `onFinal` was already invoked for this utterance via `speech_final`; skip duplicate `transcript.done`. */
   private utteranceFinalizedViaSpeechFinal = false;
 
-  constructor(apiKey: string, config: Required<GrokSTTConfig>, callbacks: STTStreamCallbacks) {
+  constructor(apiKey: string, config: Required<GrokSTTConfig>, callbacks: STTStreamCallbacks, tokenTurnDetection?: unknown) {
     this.callbacks = callbacks;
     this.sampleRate = config.sampleRate;
     this.language = config.language;
+    this.turnBuffer = new TurnBuffer(
+      getGrokTurnBufferConfig(tokenTurnDetection),
+      (text) => {
+        void this.callbacks.onFinal({
+          text,
+          language: this.language,
+        });
+      },
+    );
     this.ready = new Promise((resolve) => {
       this.resolveReady = () => {
         if (!this.openResolved) {
@@ -95,20 +106,41 @@ class GrokStreamingSession implements STTStreamingSession {
 
   private handleMessage(data: string | ArrayBuffer | Blob): void {
     if (typeof data !== 'string') {
+      void this.callbacks.onStreamingSttProviderEvent?.({
+        _nonJsonFrame: true,
+        kind: 'non_string',
+      });
       return;
     }
 
-    try {
-      const event = JSON.parse(data) as {
-        type?: string;
-        text?: string;
-        is_final?: boolean;
-        speech_final?: boolean;
-        duration?: number;
-        language?: string;
-        message?: string;
-      };
+    let event: {
+      type?: string;
+      text?: string;
+      is_final?: boolean;
+      speech_final?: boolean;
+      duration?: number;
+      language?: string;
+      message?: string;
+    };
 
+    try {
+      event = JSON.parse(data) as typeof event;
+    } catch (err) {
+      const raw =
+        data.length > 50_000 ? `${data.slice(0, 50_000)}…(truncated)` : data;
+      void this.callbacks.onStreamingSttProviderEvent?.({
+        _parseError: true,
+        raw,
+      });
+      void this.callbacks.onError?.(
+        err instanceof Error ? err : new Error(String(err)),
+      );
+      return;
+    }
+
+    void this.callbacks.onStreamingSttProviderEvent?.(event);
+
+    try {
       if (event.type === 'transcript.created') {
         this.active = true;
         this.resolveReady();
@@ -119,6 +151,7 @@ class GrokStreamingSession implements STTStreamingSession {
         if (!this.inSpeech) {
           this.inSpeech = true;
           this.utteranceFinalizedViaSpeechFinal = false;
+          this.turnBuffer.onSpeechStart();
           getEventSystem().info(EventCategory.STT, '🎤 [Grok STT] Speech detected (speech_start)');
           void this.callbacks.onVADEvent?.('speech_start');
         }
@@ -138,13 +171,10 @@ class GrokStreamingSession implements STTStreamingSession {
           if (event.speech_final) {
             getEventSystem().info(EventCategory.STT, `🎤 [Grok STT] Speech ended (speech_end) - final transcript: "${text.substring(0, 50)}${text.length > 50 ? '...' : ''}"`);
             this.utteranceFinalizedViaSpeechFinal = true;
-            void this.callbacks.onFinal({
-              text,
-              language: languageName ?? this.language,
-              duration: event.duration,
-            });
+            this.turnBuffer.addTranscript(text);
             this.finalText = '';
             this.inSpeech = false;
+            this.turnBuffer.onSpeechEnd();
             void this.callbacks.onVADEvent?.('speech_end');
           } else if (text) {
             getEventSystem().debug(EventCategory.STT, `📝 [Grok STT] Partial (is_final): "${text.substring(0, 50)}${text.length > 50 ? '...' : ''}"`);
@@ -164,15 +194,12 @@ class GrokStreamingSession implements STTStreamingSession {
         this.utteranceFinalizedViaSpeechFinal = false;
         if (text && !alreadyFinalized) {
           getEventSystem().info(EventCategory.STT, `📝 [Grok STT] Transcript done: "${text.substring(0, 50)}${text.length > 50 ? '...' : ''}"`);
-          void this.callbacks.onFinal({
-            text,
-            language: event.language ?? this.language,
-            duration: event.duration,
-          });
+          this.turnBuffer.addTranscript(text);
         }
         this.finalText = '';
         if (this.inSpeech) {
           this.inSpeech = false;
+          this.turnBuffer.onSpeechEnd();
           getEventSystem().info(EventCategory.STT, '🎤 [Grok STT] Speech ended (transcript.done)');
           void this.callbacks.onVADEvent?.('speech_end');
         }
@@ -182,6 +209,7 @@ class GrokStreamingSession implements STTStreamingSession {
       if (event.type === 'error') {
         getEventSystem().error(EventCategory.STT, `❌ [Grok STT] Error: ${event.message || 'Unknown error'}`);
         void this.callbacks.onError?.(new Error(event.message || 'Grok STT error'));
+        return;
       }
     } catch (error) {
       void this.callbacks.onError?.(error instanceof Error ? error : new Error(String(error)));
@@ -218,6 +246,7 @@ class GrokStreamingSession implements STTStreamingSession {
     this.active = false;
     this.inSpeech = false;
     this.finalText = '';
+    this.turnBuffer.reset();
   }
 
   isActive(): boolean {
@@ -297,7 +326,7 @@ export class GrokSTT extends BaseSTTProvider {
 
   async startStream(
     callbacks: STTStreamCallbacks,
-    _tokenTurnDetection?: unknown,
+    tokenTurnDetection?: unknown,
     _languageDetectionEnabled?: boolean,
   ): Promise<STTStreamingSession> {
     this.ensureInitialized();
@@ -310,6 +339,7 @@ export class GrokSTT extends BaseSTTProvider {
         sampleRate: this.sampleRate,
       },
       callbacks,
+      tokenTurnDetection,
     );
   }
 
@@ -323,4 +353,41 @@ export class GrokSTT extends BaseSTTProvider {
       supportsGPU: false,
     };
   }
+}
+
+function getGrokTurnBufferConfig(tokenTurnDetection: unknown): TurnBufferConfig {
+  const preset = typeof tokenTurnDetection === 'string' ? tokenTurnDetection : undefined;
+  const custom = typeof tokenTurnDetection === 'object' && tokenTurnDetection !== null
+    ? tokenTurnDetection as Record<string, unknown>
+    : undefined;
+  const serverVAD = typeof custom?.serverVAD === 'object' && custom.serverVAD !== null
+    ? custom.serverVAD as Record<string, unknown>
+    : undefined;
+
+  const presetDebounceMs = preset === 'aggressive'
+    ? 180
+    : preset === 'conservative'
+      ? 600
+      : 350;
+  const presetTimeoutMs = preset === 'aggressive'
+    ? 700
+    : preset === 'conservative'
+      ? 1600
+      : 1000;
+
+  return {
+    debounceMs: typeof custom?.debounceMs === 'number'
+      ? custom.debounceMs
+      : typeof custom?.minEndOfTurnSilenceWhenConfident === 'number'
+        ? custom.minEndOfTurnSilenceWhenConfident
+        : typeof serverVAD?.silenceDurationMs === 'number'
+          ? serverVAD.silenceDurationMs
+          : presetDebounceMs,
+    timeoutMs: typeof custom?.timeoutMs === 'number'
+      ? custom.timeoutMs
+      : typeof custom?.maxTurnSilence === 'number'
+        ? custom.maxTurnSilence
+        : presetTimeoutMs,
+    debug: true,
+  };
 }

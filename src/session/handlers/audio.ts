@@ -18,7 +18,11 @@ import {
   sendInputAudioTranscriptionDelta,
   sendAudioBufferCleared,
 } from '../utils/event-sender';
-import { cancelActiveResponseTurn } from '../response/response-turn-scope';
+import {
+  handleInterruptSpeechEnd,
+  handleInterruptSpeechStart,
+  handleInterruptTranscript,
+} from '../interrupt/InterruptManager';
 import { trackSilenceStart, clearSilenceTracking, shouldHibernate, enterHibernation, exitHibernation } from '../utils/hibernation';
 import { processVAD } from '../vad/processor';
 import type { SessionData } from '../types';
@@ -30,22 +34,20 @@ import { getOrCreateService, getServiceForTrace } from '../../lib/agent-analytic
 import { cleanupSTTTranscription } from '../../services/stt-pre-filter';
 import { GroqWhisperSTT } from '../../../packages/provider-groq-whisper-stt/src';
 import { LanguageDetectionService } from '../../services/language-detection/LanguageDetectionService';
+import {
+  isExplicitClientSideVAD,
+  shouldUseStreamingSTT,
+} from '../utils/streaming-stt-eligibility';
+import {
+  appendStreamingSttDebugPcm,
+  appendStreamingSttSessionDebugIfEligible,
+  beginStreamingSttDebugIfEligible,
+  finalizeStreamingSttDebugWav,
+  resetStreamingSttDebug,
+} from '../utils/stt-audio-debug';
+import { SessionDebugDumpManager } from '../utils/session-debug-dump-manager';
 // Forward declaration - will be imported from response/index.ts
 let generateResponse: (ws: ServerWebSocket<SessionData>, options?: any) => Promise<void>;
-
-function usesIntegratedTurnDetection(data: SessionData): boolean {
-  return !!data.runtimeConfig && SessionManager.isVADIntegrated(data.runtimeConfig);
-}
-
-function isExplicitClientSideVAD(data: SessionData): boolean {
-  return data.config.turn_detection === null && !usesIntegratedTurnDetection(data);
-}
-
-function shouldUseStreamingSTT(data: SessionData): boolean {
-  return data.providers?.stt.type === 'streaming' && (
-    usesIntegratedTurnDetection(data) || data.config.turn_detection !== null
-  );
-}
 
 /**
  * Set the generateResponse function (to avoid circular dependency)
@@ -115,6 +117,10 @@ async function handleStreamingSttVadEvent(ws: ServerWebSocket<SessionData>, vadE
   if (vadEvent === 'speech_start') {
     getEventSystem().info(EventCategory.VAD, '🗣️  Speech started (integrated VAD)');
     beginNewUserTranscriptionItem(data);
+    if (!data.providers) {
+      data.providers = await SessionManager.getProviders(data.runtimeConfig!);
+    }
+    beginStreamingSttDebugIfEligible(data);
 
     if (data.turnTracker) {
       const turnTracker = data.turnTracker as any;
@@ -124,9 +130,6 @@ async function handleStreamingSttVadEvent(ws: ServerWebSocket<SessionData>, vadE
 
     if (data.posthogConfig?.enabled && data.posthogConfig?.apiKey && data.currentTraceId) {
       try {
-        if (!data.providers) {
-          data.providers = await SessionManager.getProviders(data.runtimeConfig!);
-        }
         const traceId = data.currentTraceId;
         const sttProvider = data.providers!.stt.name || 'unknown';
         const analyticsService = getOrCreateService(
@@ -153,12 +156,13 @@ async function handleStreamingSttVadEvent(ws: ServerWebSocket<SessionData>, vadE
     }
 
     ws.data.lastSpeechTime = Date.now();
-    cancelActiveResponseTurn(ws, 'turn_detected');
+    handleInterruptSpeechStart(ws, 'integrated_vad', data.totalAudioMs);
     sendSpeechStarted(ws, data.totalAudioMs);
     clearSilenceTracking(data);
   } else if (vadEvent === 'speech_end') {
     getEventSystem().info(EventCategory.VAD, '🔇 Speech ended (integrated VAD)');
     ws.data.speechEndTime = Date.now();
+    handleInterruptSpeechEnd(ws, 'integrated_vad');
     sendSpeechStopped(ws, data.totalAudioMs);
     trackSilenceStart(data);
   }
@@ -169,17 +173,24 @@ function buildStreamingSttCallbacks(ws: ServerWebSocket<SessionData>): STTStream
   return {
     onPartial: async (text) => {
       getEventSystem().info(EventCategory.STT, '📝 [STT] Partial:', { text });
+      handleInterruptTranscript(ws, text, 'streaming_stt_partial');
       emitUserTranscriptionDeltaFromFullText(ws, data, text);
     },
     onFinal: async (result) => {
       getEventSystem().info(EventCategory.STT, '✅ [STT] Final:', { text: result.text });
+      await finalizeStreamingSttDebugWav(data, getPcmSampleRateHz(data));
+      handleInterruptTranscript(ws, result.text, 'streaming_stt_final');
       await handleStreamingTranscript(ws, result.text);
     },
     onVADEvent: async (event) => {
       await handleStreamingSttVadEvent(ws, event);
     },
+    onStreamingSttProviderEvent: (payload) => {
+      SessionDebugDumpManager.recordSttStreamProviderPayloadIfEligible(data, payload);
+    },
     onError: (error) => {
       getEventSystem().error(EventCategory.STT, '❌ [STT] Error:', error instanceof Error ? error : new Error(String(error)));
+      resetStreamingSttDebug(data);
     },
   };
 }
@@ -294,6 +305,9 @@ export async function handleAudioAppend(ws: ServerWebSocket<SessionData>, event:
     try {
       await data.sttStream.waitForConnection?.();
       await data.sttStream.sendAudio(audioChunk);
+      appendStreamingSttDebugPcm(data, audioChunk);
+      appendStreamingSttSessionDebugIfEligible(data, audioChunk);
+      SessionDebugDumpManager.appendSessionPcmForSttEventsDebugIfEligible(data, audioChunk);
     } catch (error) {
       getEventSystem().error(EventCategory.STT, '❌ Failed to send audio to STT stream:', error instanceof Error ? error : new Error(String(error)));
     }
@@ -698,5 +712,6 @@ export async function handleAudioCommit(ws: ServerWebSocket<SessionData>, event:
  */
 export async function handleAudioClear(ws: ServerWebSocket<SessionData>, event: any): Promise<void> {
   ws.data.audioBuffer = null;
+  resetStreamingSttDebug(ws.data);
   sendAudioBufferCleared(ws);
 }

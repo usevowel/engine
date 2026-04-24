@@ -171,13 +171,34 @@ class DeepgramStreamingSession implements STTStreamingSession {
 
   private handleMessage(data: string | ArrayBuffer | Blob): void {
     if (typeof data !== 'string') {
-      // Binary data is not expected from Deepgram STT WebSocket
+      void this.callbacks.onStreamingSttProviderEvent?.({
+        _nonJsonFrame: true,
+        kind: 'non_string',
+      });
       return;
     }
 
+    let msg: Record<string, unknown>;
     try {
-      const msg = JSON.parse(data);
+      msg = JSON.parse(data) as Record<string, unknown>;
+    } catch (err) {
+      const raw =
+        data.length > 50_000 ? `${data.slice(0, 50_000)}…(truncated)` : data;
+      void this.callbacks.onStreamingSttProviderEvent?.({
+        _parseError: true,
+        raw,
+      });
+      getEventSystem().error(
+        EventCategory.STT,
+        '❌ [Deepgram STT] Failed to parse message:',
+        err instanceof Error ? err : new Error(String(err)),
+      );
+      return;
+    }
 
+    void this.callbacks.onStreamingSttProviderEvent?.(msg);
+
+    try {
       if (msg.type === 'Results') {
         const transcript = msg.channel?.alternatives?.[0]?.transcript || '';
         const isFinal = msg.is_final === true;

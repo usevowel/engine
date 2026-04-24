@@ -19,6 +19,7 @@
  */
 
 import { ServerWebSocket } from 'bun';
+import { ZodError } from 'zod';
 import { generateEventId, generateItemId, generateResponseId, ConversationItem } from '../../lib/protocol';
 import { buildSystemPrompt } from '../../config/env';
 import { TextChunker } from '../../lib/text-chunking';
@@ -68,6 +69,7 @@ import {
   sendResponseDone,
 } from '../utils/event-sender';
 import { tryEmitResponseCancelled } from './response-turn-scope';
+import { clearPendingInterrupt } from '../interrupt/InterruptManager';
 
 function formatUnknownError(error: unknown): string {
   if (error instanceof Error) {
@@ -101,6 +103,7 @@ export async function generateResponse(ws: ServerWebSocket<SessionData>, options
   const data = ws.data;
   // End any in-flight turn so the previous `generateResponse` stream observes
   // this scope's `AbortSignal` on the next chunk (replaces ad-hoc id equality checks).
+  clearPendingInterrupt(data);
   data.responseTurnAbort?.abort();
   const turnAbort = new AbortController();
   data.responseTurnAbort = turnAbort;
@@ -164,12 +167,15 @@ export async function generateResponse(ws: ServerWebSocket<SessionData>, options
                          'en';
   
   // Select appropriate voice for current language (maintains gender preference from initial voice)
-  // Pass baseVoice as both initialVoice (for gender detection) and currentVoice (to check if already appropriate)
+  const ttsProvider = data.runtimeConfig?.providers?.tts?.provider;
   const voice = selectVoiceForLanguageChange(
     currentLanguage,
-    baseVoice, // Use base voice to determine gender preference
-    baseVoice, // Fallback to base voice
-    baseVoice // Check if base voice is already appropriate for current language
+    data.initialVoice || baseVoice,
+    baseVoice,
+    baseVoice,
+    data.languageVoiceMap,
+    data.lastVoicePerLanguage,
+    ttsProvider
   );
   const speakingRate = data.config.speaking_rate; // Use session config speaking rate if set
   
@@ -1881,33 +1887,57 @@ export async function generateResponse(ws: ServerWebSocket<SessionData>, options
       }
     }
     
-    // Log API key context if available
-    if (data.runtimeConfig?.llm?.apiKey) {
-      const apiKey = data.runtimeConfig.llm.apiKey;
-      const keyPreview = apiKey 
-        ? `${apiKey.substring(0, 8)}...${apiKey.substring(apiKey.length - 4)}`
-        : 'MISSING';
-      const provider = data.runtimeConfig.llm.provider;
-      getEventSystem().error(EventCategory.PROVIDER, `🔑 Response error context: provider=${provider}, apiKey=${keyPreview}`);
+    // Log LLM + speech provider key context (speech failures often occur after a successful LLM stream)
+    const rc = data.runtimeConfig;
+    if (rc) {
+      const previewKey = (key: string | undefined): string => {
+        if (!key) return 'MISSING';
+        if (key.length <= 12) return '(set)';
+        return `${key.substring(0, 8)}...${key.substring(key.length - 4)}`;
+      };
+      if (rc.llm?.apiKey) {
+        getEventSystem().error(
+          EventCategory.PROVIDER,
+          `🔑 Response error context (LLM): provider=${rc.llm.provider}, apiKey=${previewKey(rc.llm.apiKey)}`
+        );
+      }
+      const sttKey = (rc.providers.stt.config as Record<string, unknown>)?.apiKey as string | undefined;
+      const ttsKey = (rc.providers.tts.config as Record<string, unknown>)?.apiKey as string | undefined;
+      getEventSystem().error(
+        EventCategory.PROVIDER,
+        `🔑 Speech providers: STT=${rc.providers.stt.provider} (apiKey ${previewKey(sttKey)}), TTS=${rc.providers.tts.provider} (apiKey ${previewKey(ttsKey)})`
+      );
     }
-    
+
     // Detect fatal LLM provider errors using whitelist approach
     // Only tool errors are recoverable; everything else is fatal
     const errorAnalysis = detectFatalLLMError(error);
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    
+
     // Check for provider-specific TTS structured errors (special cases)
     const isInworldError = error instanceof Error && error.name === 'InworldTTSError';
     const inworldErrorDetails = isInworldError ? (error as any).details : null;
     const isOpenAICompatibleTTSError = error instanceof Error && error.name === 'OpenAICompatibleTTSError';
     const openAICompatibleErrorDetails = isOpenAICompatibleTTSError ? (error as any).details : null;
-    
-    // Log API key errors prominently (in addition to fatal error detection)
-    if (errorMessage.toLowerCase().includes('api key') || 
-        errorMessage.toLowerCase().includes('unauthorized') ||
-        errorMessage.toLowerCase().includes('authentication') ||
-        errorMessage.toLowerCase().includes('invalid') ||
-        errorMessage.toLowerCase().includes('401')) {
+
+    const isZodConfigError = error instanceof ZodError || (error instanceof Error && error.name === 'ZodError');
+    const msgLower = errorMessage.toLowerCase();
+    /** Local env/schema messages — not remote 401 / bad LLM key */
+    const isLocalConfigKeyMessage =
+      /api key is required/i.test(errorMessage) ||
+      /not configured/i.test(errorMessage) ||
+      /grok_api_key is required/i.test(errorMessage);
+
+    // Log remote auth / bad-key style errors prominently (skip Zod + local "set GROK_API_KEY" style text)
+    if (
+      !isZodConfigError &&
+      !isLocalConfigKeyMessage &&
+      (msgLower.includes('api key') ||
+        msgLower.includes('unauthorized') ||
+        msgLower.includes('authentication') ||
+        msgLower.includes('invalid') ||
+        msgLower.includes('401'))
+    ) {
       getEventSystem().critical(EventCategory.AUTH, `🚨 API KEY ERROR in response generation!`);
       getEventSystem().error(EventCategory.SESSION, `🔍 Full error: ${errorMessage}`);
     }

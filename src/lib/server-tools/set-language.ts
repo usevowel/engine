@@ -253,13 +253,15 @@ export async function executeSetLanguageTool(
   const languageVoiceMap = sessionData.languageVoiceMap;
   const lastVoicePerLanguage = sessionData.lastVoicePerLanguage;
   
+  const ttsProvider = sessionData.runtimeConfig?.providers?.tts?.provider;
   const newVoice = selectVoiceForLanguageChange(
     normalizedCode,
     initialVoice,
     initialVoice || currentVoice || 'Ashley', // Fallback to configured/current voice or default
     currentVoice,
     languageVoiceMap,
-    lastVoicePerLanguage
+    lastVoicePerLanguage,
+    ttsProvider
   );
   
   // Track this voice as the last used voice for this language

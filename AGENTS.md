@@ -164,13 +164,29 @@ engine/
 - `silero` - Silero VAD (local, standalone)
 - `none` - Disable VAD
 
+### VAD Provider Mode
+
+**VAD_PROVIDER_MODE** - Selects the ONNX Runtime backend:
+- `node` (default): Uses onnxruntime-node (Node.js/Bun runtime, supports GPU acceleration)
+- `wasm`: Uses onnxruntime-web (WASM for Cloudflare Workers deployment)
+
 ### Configuration Examples
 
-**Default (Groq + Silero):**
+**Default (Groq + Silero Node.js):**
 ```bash
 LLM_PROVIDER=groq
 STT_PROVIDER=groq-whisper
 VAD_PROVIDER=silero
+VAD_PROVIDER_MODE=node  # Default
+```
+
+**Cloudflare Workers (WASM mode):**
+```bash
+LLM_PROVIDER=groq
+STT_PROVIDER=groq-whisper
+VAD_PROVIDER=silero
+VAD_PROVIDER_MODE=wasm  # For Cloudflare Workers
+SILERO_VAD_MODEL_PATH=models/silero-vad/silero_vad.onnx  # R2/Static Assets path
 ```
 
 **OpenRouter:**

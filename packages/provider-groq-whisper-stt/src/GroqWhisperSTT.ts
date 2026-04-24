@@ -79,10 +79,11 @@ export class GroqWhisperSTT extends BaseSTTProvider {
     
     // Reuse existing transcription logic with provider-specific config
     const result = await transcribeAudio(
-      audioBuffer, 
+      audioBuffer,
       options?.language,
       this.apiKey,
-      this.config.whisperModel
+      this.config.whisperModel,
+      options?.sampleRate ?? 24000,
     );
     
     return {

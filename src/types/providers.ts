@@ -62,6 +62,21 @@ export interface LanguageDetectionResult {
 }
 
 /**
+ * One row in the optional per-session STT WebSocket debug log (`STT_STREAM_EVENTS_DEBUG`).
+ */
+export interface StreamingSttProviderDebugRecord {
+  /** Unix ms when the engine received the provider message */
+  receivedAtMs: number;
+  /** Registry STT name, e.g. `grok`, `deepgram` */
+  provider: string;
+  /**
+   * Provider JSON object as parsed, or an envelope such as
+   * `{ _parseError: true, raw: string }` / `{ _nonJsonFrame: true, kind: string }`.
+   */
+  payload: unknown;
+}
+
+/**
  * Callbacks for streaming transcription
  */
 export interface STTStreamCallbacks {
@@ -70,6 +85,11 @@ export interface STTStreamCallbacks {
   onError?: (error: Error) => void | Promise<void>;
   onVADEvent?: (event: VADEvent) => void | Promise<void>;
   onLanguageDetected?: (result: LanguageDetectionResult) => void | Promise<void>;
+  /**
+   * Inbound streaming STT WebSocket payload (parsed JSON or debug envelope) for
+   * optional session-level JSON dump. Implementations should not throw.
+   */
+  onStreamingSttProviderEvent?: (payload: unknown) => void | Promise<void>;
 }
 
 /**

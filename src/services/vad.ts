@@ -1,17 +1,26 @@
 /**
  * Voice Activity Detection (VAD) Service
- * 
+ *
  * Implements Silero VAD v5 using ONNX Runtime for high-performance
  * speech detection with GPU acceleration support (CUDA, Vulkan, CPU).
- * 
+ *
  * NOTE: This module lazy-loads onnxruntime-node to avoid bundling issues.
  * Import happens on first use, not at module load.
+ *
+ * MODE SELECTION:
+ * - VAD_PROVIDER_MODE=node (default): Uses onnxruntime-node (Node.js/Bun)
+ * - VAD_PROVIDER_MODE=wasm: Uses onnxruntime-web (WASM for Cloudflare Workers)
  */
 
 import { join } from 'path';
 import { existsSync, createWriteStream, mkdirSync } from 'fs';
 
 import { getEventSystem, EventCategory } from '../events';
+
+// Mode selection via ENV var
+export type VADProviderMode = 'node' | 'wasm';
+export const VAD_PROVIDER_MODE: VADProviderMode = (process.env.VAD_PROVIDER_MODE as VADProviderMode) || 'node';
+
 // Lazy-load onnxruntime-node to avoid bundling issues
 let ort: typeof import('onnxruntime-node') | null = null;
 
@@ -22,8 +31,7 @@ async function loadONNXRuntime() {
   return ort;
 }
 
-const SILERO_VAD_MODEL_PATH = process.env.SILERO_VAD_MODEL_PATH || 
-  join(process.cwd(), 'vendor/silero-vad/silero_vad.onnx');
+const SILERO_VAD_MODEL_PATH = process.env.SILERO_VAD_MODEL_PATH || join(process.cwd(), 'vendor/silero-vad/silero_vad.onnx');
 
 // Model download URL from official Silero VAD repository
 const SILERO_VAD_MODEL_URL = 'https://github.com/snakers4/silero-vad/raw/master/src/silero_vad/data/silero_vad.onnx';
@@ -410,7 +418,22 @@ let vadInstance: SileroVAD | null = null;
 /**
  * Get or create VAD instance
  */
-export async function getVAD(options?: VADOptions): Promise<SileroVAD> {
+export async function getVAD(options?: VADOptions, r2Bucket?: R2Bucket): Promise<SileroVAD> {
+  if (VAD_PROVIDER_MODE === 'wasm') {
+    // Use WASM implementation - dynamically imported to avoid bundling in Node.js
+    try {
+      const { getVAD: getWasmVAD } = await import('./vad-wasm');
+      return getWasmVAD(options, r2Bucket);
+    } catch (error) {
+      getEventSystem().error(EventCategory.VAD, '❌ Failed to load WASM VAD implementation:', error);
+      throw new Error(
+        `WASM VAD mode requested but onnxruntime-web is not available. ` +
+        `Install it with: bun add onnxruntime-web`
+      );
+    }
+  }
+
+  // Use Node.js implementation (default)
   if (!vadInstance) {
     vadInstance = new SileroVAD(options);
     await vadInstance.initialize();
@@ -422,6 +445,22 @@ export async function getVAD(options?: VADOptions): Promise<SileroVAD> {
  * Check if VAD is ready
  */
 export function isVADReady(): boolean {
+  if (VAD_PROVIDER_MODE === 'wasm') {
+    // Check WASM VAD readiness - use require to avoid async in sync function
+    try {
+      const { isVADReady: isWasmVADReady } = require('./vad-wasm');
+      return isWasmVADReady();
+    } catch {
+      return false;
+    }
+  }
   return vadInstance !== null;
+}
+
+/**
+ * Get the current VAD provider mode
+ */
+export function getVADProviderMode(): VADProviderMode {
+  return VAD_PROVIDER_MODE;
 }
 

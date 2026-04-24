@@ -174,6 +174,9 @@ export function buildSessionConfig(
     currentTraceId: sessionId,
     currentResponseId: null,
     responseTurnAbort: null,
+    interruptPolicy: {
+      mode: 'confirm_before_cancel',
+    },
     vadEnabled,
     audioBufferStartMs: 0,
     totalAudioMs: 0,

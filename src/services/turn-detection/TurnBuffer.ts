@@ -168,18 +168,21 @@ export class TurnBuffer {
       });
     }
     
-    // Cancel timeout if speech resumes
-    if (this.timeoutTimer) {
+    // Do not cancel the safety timeout once transcript text exists. Some
+    // streaming STT providers emit repeated speech_start/speech_end events for
+    // one utterance; cancelling the timeout on every speech_start can leave the
+    // accumulated turn stuck forever if no final stop arrives.
+    if (this.timeoutTimer && this.accumulatedText.length === 0) {
       clearTimeout(this.timeoutTimer);
       this.timeoutTimer = null;
-      this.log('⏸️  Timeout cancelled (speech resumed)');
+      this.log('⏸️  Timeout cancelled (speech resumed before transcript)');
     }
   }
   
   /**
    * Called when speech ends (VAD event)
-   * If LLM is enabled: Immediately calls LLM turn detection (no debounce)
-   * If LLM is disabled: Starts debounce timer before finalizing
+   * Starts a short debounce before finalization checks. This gives streaming
+   * STT providers time to deliver continuation fragments after a natural pause.
    */
   onSpeechEnd(): void {
     this.isSpeaking = false;
@@ -187,13 +190,7 @@ export class TurnBuffer {
     
     // Only check turn completion if we have accumulated text
     if (this.accumulatedText.length > 0) {
-      if (this.turnDetectionService) {
-        // LLM enabled: Call immediately (no debounce)
-        this.onDebounceExpired();
-      } else {
-        // LLM disabled: Use simple debounce before finalizing
-        this.startDebounce();
-      }
+      this.startDebounce();
     }
   }
   
@@ -424,4 +421,3 @@ export class TurnBuffer {
     }
   }
 }
-
