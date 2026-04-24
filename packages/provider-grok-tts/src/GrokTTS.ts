@@ -33,6 +33,30 @@ function base64ToUint8Array(b64: string): Uint8Array {
   return bytes;
 }
 
+async function connectAuthenticatedWebSocket(url: URL, apiKey: string): Promise<WebSocket> {
+  const runtimeFetch = globalThis.fetch;
+  if (typeof runtimeFetch === 'function') {
+    const upgradeUrl = new URL(url.toString());
+    upgradeUrl.protocol = upgradeUrl.protocol === 'wss:' ? 'https:' : upgradeUrl.protocol;
+    const response = await runtimeFetch(upgradeUrl.toString(), {
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        Upgrade: 'websocket',
+      },
+    } as RequestInit);
+
+    const webSocket = (response as Response & { webSocket?: WebSocket }).webSocket;
+    if (response.status === 101 && webSocket) {
+      webSocket.accept?.();
+      return webSocket;
+    }
+
+    throw new Error(`Grok TTS WebSocket upgrade failed: ${response.status} ${await response.text().catch(() => '')}`.trim());
+  }
+
+  throw new Error('Grok TTS WebSocket upgrade requires fetch with WebSocket upgrade support');
+}
+
 export class GrokTTS extends BaseTTSProvider {
   readonly name = 'grok';
   readonly type = 'streaming' as const;
@@ -167,14 +191,11 @@ export class GrokTTS extends BaseTTSProvider {
     };
 
     try {
-      ws = new WebSocket(url.toString(), [`xai-client-secret.${this.apiKey}`]);
-
-      ws.addEventListener('open', () => {
-        opened = true;
-        ws?.send(JSON.stringify({ type: 'text.delta', delta: text }));
-        ws?.send(JSON.stringify({ type: 'text.done' }));
-        notify();
-      });
+      ws = await connectAuthenticatedWebSocket(url, this.apiKey);
+      opened = true;
+      ws.send(JSON.stringify({ type: 'text.delta', delta: text }));
+      ws.send(JSON.stringify({ type: 'text.done' }));
+      notify();
 
       ws.addEventListener('message', (event) => {
         handleMessage(event.data);
