@@ -79,10 +79,11 @@ export function attemptRepair(
  * Attempt automatic repair (Strategy 1)
  * 
  * Fixes common, predictable errors without LLM involvement:
- * - Type coercion (string → number, etc.)
- * - Strip extra fields
- * - Handle null/undefined for optional fields
- * - Fix simple format issues
+ * - Type coercion (string → number, etc.) at any depth
+ * - Strip extra fields at any nesting depth
+ * - Handle null/undefined for optional fields at any depth
+ * - Fix array-vs-object confusion at any depth
+ * - Fix extra nesting level at any depth
  * 
  * @param input - Original input
  * @param error - Validation error
@@ -100,7 +101,17 @@ function attemptAutomaticRepair(
   let repairedInput = { ...input };
   let madeChanges = false;
   
-  // Strategy 1: Type Coercion
+  // --- Phase 1: Deep recursive structural repair ---
+  const deepResult = deepStructuralRepair(repairedInput, schema.shape, '');
+  if (deepResult.changed) {
+    repairedInput = deepResult.value;
+    madeChanges = true;
+    getEventSystem().info(EventCategory.SYSTEM, `✅ [ToolRepairer] Deep structural repair applied changes`);
+  }
+  
+  // --- Phase 2: Error-specific repairs (on remaining issues) ---
+  
+  // Strategy A: Type Coercion
   for (const issue of error.issues) {
     if (issue.code === 'invalid_type') {
       const path = issue.path.join('.');
@@ -110,7 +121,6 @@ function attemptAutomaticRepair(
       
       getEventSystem().info(EventCategory.SYSTEM, `🔧 [ToolRepairer] Type mismatch at ${path}: expected ${expected}, got ${received}`);
       
-      // Try to coerce the type
       const coerced = coerceType(value, expected);
       if (coerced !== undefined) {
         setNestedValue(repairedInput, issue.path, coerced);
@@ -120,7 +130,7 @@ function attemptAutomaticRepair(
     }
   }
   
-  // Strategy 2: Strip Extra Fields
+  // Strategy B: Strip Top-Level Extra Fields
   const extraFields = error.issues.filter(i => i.code === 'unrecognized_keys');
   if (extraFields.length > 0) {
     const schemaKeys = Object.keys(schema.shape);
@@ -135,17 +145,70 @@ function attemptAutomaticRepair(
     }
   }
   
-  // Strategy 3: Handle Null/Undefined for Optional Fields
+  // Strategy C: Handle Null/Undefined for Optional Fields
   for (const issue of error.issues) {
     if (issue.code === 'invalid_type' && issue.received === 'undefined') {
       const path = issue.path.join('.');
       const schemaField = getSchemaField(schema, issue.path);
-      
-      // Check if field is optional (nullable)
       if (schemaField && isOptionalField(schemaField)) {
         setNestedValue(repairedInput, issue.path, null);
         madeChanges = true;
         getEventSystem().info(EventCategory.SYSTEM, `✅ [ToolRepairer] Set undefined optional field ${path} to null`);
+      }
+    }
+  }
+  
+  // Strategy D: Fix extra nesting level — detect when a value is wrapped in an extra object
+  // E.g., schema expects string at path "foo", but value is { foo: string }
+  for (const issue of error.issues) {
+    if (issue.code === 'invalid_type' && issue.received === 'object') {
+      const path = issue.path;
+      const schemaField = getSchemaField(schema, path);
+      const value = getNestedValue(repairedInput, path);
+      
+      if (value && typeof value === 'object' && !Array.isArray(value) && schemaField) {
+        // Try: maybe value IS the expected shape but wrapped
+        const unwrapped = tryUnwrapExtraLevel(value, schemaField);
+        if (unwrapped !== undefined) {
+          setNestedValue(repairedInput, path, unwrapped);
+          madeChanges = true;
+          getEventSystem().info(EventCategory.SYSTEM, `✅ [ToolRepairer] Fixed extra nesting level at ${path.join('.')}`);
+        }
+      }
+    }
+  }
+  
+  // Strategy E: Fix array-vs-object confusion at nested levels
+  for (const issue of error.issues) {
+    if (issue.code === 'invalid_type' && issue.received === 'array' && ['object', 'string', 'number'].includes(issue.expected)) {
+      const path = issue.path;
+      const value = getNestedValue(repairedInput, path);
+      if (Array.isArray(value) && value.length > 0) {
+        // Array where scalar expected: take first element
+        const schemaField = getSchemaField(schema, path);
+        if (schemaField) {
+          const first = value[0];
+          if (typeof first !== 'object' || first === null) {
+            setNestedValue(repairedInput, path, first);
+          } else {
+            // Try to validate first element against expected schema
+            const coerced = coerceType(first, issue.expected);
+            if (coerced !== undefined) {
+              setNestedValue(repairedInput, path, coerced);
+            }
+          }
+          madeChanges = true;
+          getEventSystem().info(EventCategory.SYSTEM, `✅ [ToolRepairer] Fixed array-to-scalar at ${path.join('.')}: took first element`);
+        }
+      }
+    }
+    if (issue.code === 'invalid_type' && issue.received === 'object' && issue.expected === 'array') {
+      const path = issue.path;
+      const value = getNestedValue(repairedInput, path);
+      if (value && typeof value === 'object' && !Array.isArray(value)) {
+        setNestedValue(repairedInput, path, [value]);
+        madeChanges = true;
+        getEventSystem().info(EventCategory.SYSTEM, `✅ [ToolRepairer] Fixed object-to-array at ${path.join('.')}: wrapped in array`);
       }
     }
   }
@@ -163,7 +226,6 @@ function attemptAutomaticRepair(
       };
     } catch (retryError) {
       getEventSystem().error(EventCategory.SYSTEM, `⚠️  [ToolRepairer] Automatic repair made changes but validation still failed`);
-      // Fall through to LLM re-ask
     }
   } else {
     getEventSystem().warn(EventCategory.SYSTEM, `⚠️  [ToolRepairer] No automatic repairs applicable`);
@@ -173,6 +235,209 @@ function attemptAutomaticRepair(
     success: false,
     strategy: 'none'
   };
+}
+
+interface DeepRepairResult {
+  value: any;
+  changed: boolean;
+}
+
+/**
+ * Deep recursive structural repair
+ * 
+ * Walks the input object tree and schema shape tree in parallel:
+ * - Strips unknown keys from nested objects
+ * - Fixes array-vs-object confusion at any depth
+ * - Coerces types at any depth
+ * 
+ * @param input - Input value (may be mutated in place)
+ * @param shape - Zod shape (schema.shape)
+ * @param path - Current dot-path for logging
+ * @returns Repaired value and whether changes were made
+ */
+function deepStructuralRepair(input: any, shape: Record<string, any>, path: string): DeepRepairResult {
+  if (input === null || input === undefined || typeof input !== 'object') {
+    return { value: input, changed: false };
+  }
+  
+  let changed = false;
+  let result: any;
+  
+  if (Array.isArray(input)) {
+    // Array input — try to repair each element if shape describes an array
+    result = [...input];
+    for (let i = 0; i < result.length; i++) {
+      const elemResult = deepRepairValue(result[i], shape, `${path}[${i}]`);
+      if (elemResult.changed) {
+        result[i] = elemResult.value;
+        changed = true;
+      }
+    }
+  } else {
+    // Object input
+    result = { ...input };
+    
+    // Strip unknown keys
+    for (const key of Object.keys(result)) {
+      if (!(key in shape)) {
+        delete result[key];
+        changed = true;
+        getEventSystem().debug(EventCategory.SYSTEM, `🔧 [DeepRepair] Stripped unknown key '${key}' at ${path || 'root'}`);
+        continue;
+      }
+      
+      const fieldDef = shape[key];
+      const fieldTypeName = fieldDef?._def?.typeName;
+      
+      if (fieldTypeName === 'ZodObject') {
+        // Recurse into nested objects
+        const nestedResult = deepStructuralRepair(result[key], fieldDef.shape, `${path}.${key}`);
+        if (nestedResult.changed) {
+          result[key] = nestedResult.value;
+          changed = true;
+        }
+      } else if (fieldTypeName === 'ZodArray' && fieldDef._def?.type) {
+        // Recurse into array items
+        const itemType = fieldDef._def.type;
+        const itemTypeName = itemType?._def?.typeName;
+        if (itemTypeName === 'ZodObject' && Array.isArray(result[key])) {
+          const arrResult = deepStructuralRepair(result[key], itemType.shape || {}, `${path}.${key}`);
+          if (arrResult.changed) {
+            result[key] = arrResult.value;
+            changed = true;
+          }
+        } else if (itemTypeName === 'ZodObject' && result[key] && typeof result[key] === 'object' && !Array.isArray(result[key])) {
+          // Array expected, got object — wrap in array
+          result[key] = [result[key]];
+          changed = true;
+          getEventSystem().debug(EventCategory.SYSTEM, `🔧 [DeepRepair] Wrapped object in array at ${path}.${key}`);
+        }
+      } else if (fieldTypeName === 'ZodNullable' || fieldTypeName === 'ZodOptional') {
+        // Peel nullable/optional layers, check inner type
+        const innerType = fieldDef._def?.innerType;
+        if (innerType?._def?.typeName === 'ZodObject') {
+          const nestedResult = deepStructuralRepair(result[key], innerType.shape, `${path}.${key}`);
+          if (nestedResult.changed) {
+            result[key] = nestedResult.value;
+            changed = true;
+          }
+        }
+      } else if (fieldTypeName === 'ZodUnion' || fieldTypeName === 'ZodDiscriminatedUnion') {
+        // Try each union option
+        const options = fieldDef._def?.options || [];
+        const innerResult = tryDeepRepairAgainstOptions(result[key], options, `${path}.${key}`);
+        if (innerResult.changed) {
+          result[key] = innerResult.value;
+          changed = true;
+        }
+      }
+    }
+  }
+  
+  return { value: result, changed };
+}
+
+function deepRepairValue(input: any, shape: Record<string, any>, path: string): DeepRepairResult {
+    if (input === null || input === undefined || typeof zodShape !== 'object') {
+      return input;
+    }
+  if (typeof input === 'object') {
+    return deepStructuralRepair(input, shape, path);
+  }
+  return { value: input, changed: false };
+}
+
+function tryDeepRepairAgainstOptions(
+  input: any,
+  options: any[],
+  path: string
+): DeepRepairResult {
+  if (!input || typeof input !== 'object') {
+    return { value: input, changed: false };
+  }
+  
+  let bestResult: DeepRepairResult = { value: input, changed: false };
+  let bestScore = -1;
+  
+  for (const option of options) {
+    const optTypeName = option?._def?.typeName;
+    if (optTypeName === 'ZodObject') {
+      const inputKeys = new Set(Object.keys(input));
+      const schemaKeys = new Set(Object.keys(option.shape || {}));
+      const intersection = [...inputKeys].filter(k => schemaKeys.has(k));
+      const score = intersection.length;
+      
+      if (score > bestScore) {
+        const nestedResult = deepStructuralRepair(input, option.shape || {}, path);
+        if (nestedResult.changed || score > bestScore) {
+          bestResult = { value: nestedResult.value, changed: true };
+          bestScore = score;
+        }
+      }
+    }
+  }
+  
+  return bestResult;
+}
+
+/**
+ * Try to unwrap an extra nesting level
+ * 
+ * When the LLM wraps tool args in an extra object, e.g.:
+ * Schema expects: { query: string }
+ * LLM sends: { query: { query: "foo" } }
+ * 
+ * This detects if the value's keys match the schema's nested shape
+ * and unwraps accordingly.
+ */
+function tryUnwrapExtraLevel(value: Record<string, any>, schemaField: any): any | undefined {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return undefined;
+  }
+  
+  const fieldTypeName = schemaField?._def?.typeName;
+  
+  // If schema expects a non-object type but got an object, try:
+  // - If object has exactly one key that is also a key in the parent schema, maybe it's a mis-nesting
+  // - If object has a key matching its own property name (redundancy): { query: { query: "foo" } }
+  if (fieldTypeName !== 'ZodObject' && fieldTypeName !== 'ZodNullable' && fieldTypeName !== 'ZodOptional') {
+    return undefined;
+  }
+  
+  // Get the inner shape
+  let innerShape: Record<string, any> | null = null;
+  if (fieldTypeName === 'ZodObject') {
+    innerShape = schemaField.shape;
+  } else if (fieldTypeName === 'ZodNullable' || fieldTypeName === 'ZodOptional') {
+    const inner = schemaField._def?.innerType;
+    if (inner?._def?.typeName === 'ZodObject') {
+      innerShape = inner.shape;
+    }
+  }
+  
+  if (!innerShape) return undefined;
+  
+  // Check if all value keys are valid inner-shape keys
+  const valueKeys = Object.keys(value);
+  const allMatch = valueKeys.length > 0 && valueKeys.every(k => k in innerShape);
+  
+  if (!allMatch) {
+    // Maybe the value has extra nesting: value[key] = { key: actual_value }
+    // E.g., value = { query: { query: "foo" } } where schema expects query: string
+    for (const key of valueKeys) {
+      if (key in innerShape && value[key] && typeof value[key] === 'object' && !Array.isArray(value[key])) {
+        const innerKeys = Object.keys(value[key]);
+        if (innerKeys.length === 1 && innerKeys[0] === key) {
+          // Redundant nesting: { key: { key: actual } }
+          return { ...value, [key]: value[key][key] };
+        }
+      }
+    }
+    return undefined;
+  }
+  
+  // Value is already matching inner shape — return as-is but mark that schema was deeper
+  return value;
 }
 
 /**

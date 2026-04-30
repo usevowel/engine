@@ -609,6 +609,7 @@ export async function generateResponse(ws: ServerWebSocket<SessionData>, options
     let toolCalled = false;
     let serverToolCalled = false; // Track if a server tool (like setLanguage) was called
     let llmFirstTokenReceived = false;
+    const pendingClientToolCalls: ConversationItem[] = [];
     let responseFinalized = false;
     /** Token usage from LLM provider (captured from usage events) */
     let tokenUsage: { promptTokens?: number; completionTokens?: number; totalTokens?: number } | null = null;
@@ -997,22 +998,15 @@ export async function generateResponse(ws: ServerWebSocket<SessionData>, options
         }
         
       } else if (part.type === 'tool_call') {
-        // Tool call: log details, differentiate server vs client tools
         getEventSystem().info(EventCategory.SESSION, `🔧 Tool call requested: ${part.toolName}`);
         getEventSystem().info(EventCategory.SESSION, `📤 Tool call details (call_id: ${part.toolCallId}) - FULL UNTRUNCATED:`);
-        // Log the full tool call with no truncation - critical for debugging
         const fullToolCall = { toolName: part.toolName, toolCallId: part.toolCallId, args: part.args };
         getEventSystem().info(EventCategory.SESSION, JSON.stringify(fullToolCall, null, 2));
         getEventSystem().info(EventCategory.SESSION, `📤 Raw args object:`, part.args);
 
-        // Check if this is a server tool (executed server-side)
-        // CRITICAL: Server tools are executed AUTOMATICALLY by the AI SDK via their execute functions
-        // We do NOT manually execute them here - the SDK already ran them when it received the tool call
-        // We need to add the function_call to history so tool-result can look it up
         if (serverToolRegistry.isServerTool(part.toolName, toolContext)) {
           getEventSystem().info(EventCategory.SESSION, `🖥️  [ServerTool] ${part.toolName} - AI SDK executed via tool's execute function (no manual execution needed)`);
           
-          // Add function_call to conversation history so tool-result can look it up
           const serverToolCallItem: ConversationItem = {
             id: generateItemId(),
             type: 'function_call',
@@ -1025,11 +1019,8 @@ export async function generateResponse(ws: ServerWebSocket<SessionData>, options
           data.conversationHistory.push(serverToolCallItem);
           getEventSystem().info(EventCategory.SESSION, `📝 [ServerTool] Added function_call to history for ${part.toolName} (call_id: ${part.toolCallId})`);
           
-          // DON'T set toolCalled=true for server tools - they complete synchronously within the stream
-          // The LLM continues generating after server tool execution, so we need to save the response to history
-          serverToolCalled = true; // Track that a server tool was called (for empty response detection)
+          serverToolCalled = true;
           
-          // Log warning for setLanguage to help diagnose if AI stops after tool call
           if (part.toolName === 'setLanguage') {
             getEventSystem().warn(EventCategory.LLM, `⚠️ [setLanguage Tool] AI called setLanguage - watching if generation continues or stops...`);
           }
@@ -1037,18 +1028,15 @@ export async function generateResponse(ws: ServerWebSocket<SessionData>, options
           continue;
         }
 
-        // CLIENT TOOL: Set toolCalled flag - we'll break and wait for client to send tool output
-        // This causes early return at end of function, which is correct for client tools
+        // CLIENT TOOL: batch-collect all tool calls in this response
+        // Don't break — there may be more tool calls in the same stream
+        // All collected calls are sent to client after the stream ends
         toolCalled = true;
 
-        // Non-speak tools in explicit mode: send tool call but don't synthesize audio
         if (data.speechMode === 'explicit' && part.toolName !== 'speak') {
           getEventSystem().info(EventCategory.TTS, `🎤 [Explicit Mode] Non-speak tool call: ${part.toolName} (no TTS)`);
         }
 
-        // Create function_call item (OpenAI Realtime API format)
-        // CRITICAL: arguments must be a string (JSON-encoded), never undefined
-        // JSON.stringify(undefined) returns undefined, which breaks OpenAI SDK validation
         const functionCallItem: ConversationItem = {
           id: generateItemId(),
           type: 'function_call',
@@ -1059,14 +1047,18 @@ export async function generateResponse(ws: ServerWebSocket<SessionData>, options
           arguments: part.args !== undefined ? JSON.stringify(part.args) : '{}',
         };
 
-        // Add to conversation history
         data.conversationHistory.push(functionCallItem);
-
-        // Send as response.output_item.added event (SDK will emit function_call event)
-        sendOutputItemAdded(ws, responseId, 1, functionCallItem);
-
-        // Stop generating - wait for client to send tool output and response.create
-        break;
+        pendingClientToolCalls.push(functionCallItem);
+        
+        getEventSystem().info(EventCategory.SESSION, `📦 [BatchToolCalls] Collected client tool call: ${part.toolName} (total collected: ${pendingClientToolCalls.length})`);
+        
+        if (data.speechMode === 'explicit') {
+          sendOutputItemAdded(ws, responseId, 1, functionCallItem);
+        }
+        
+        // Continue processing the stream — don't break
+        // This allows multi-tool responses to be collected as a batch
+        continue;
       } else if (part.type === 'tool-result') {
         // Tool result from AI SDK - server tools are executed automatically
         // We use this to update conversation history for server tools
@@ -1367,15 +1359,25 @@ export async function generateResponse(ws: ServerWebSocket<SessionData>, options
     // If a tool was called, don't flush text or complete the response
     // Wait for client to send tool output and response.create
     if (toolCalled) {
-      getEventSystem().info(EventCategory.SESSION, '⏸️  Response paused - waiting for tool output from client');
+      getEventSystem().info(EventCategory.SESSION, `⏸️  Response paused - waiting for tool output(s) from client (${pendingClientToolCalls.length} pending)`);
       logResponseDebug('response paused awaiting client tool output', {
         status: 'incomplete',
+        pendingClientToolCalls: pendingClientToolCalls.length,
       });
       
       // Send text.done with what we have so far
       if (fullText) {
         sendTextDone(ws, responseId, itemId, fullText);
       }
+      
+      // Batch-send all pending client tool calls
+      // In non-explicit mode, these weren't sent yet — send them now
+      if (data.speechMode !== 'explicit') {
+        for (const item of pendingClientToolCalls) {
+          sendOutputItemAdded(ws, responseId, 1, item);
+        }
+      }
+      getEventSystem().info(EventCategory.SESSION, `📦 [BatchToolCalls] Sent ${pendingClientToolCalls.length} client tool calls to client`);
       
       // Mark response as incomplete (waiting for tool output)
       sendResponseDone(ws, responseId, 'incomplete', [], null);

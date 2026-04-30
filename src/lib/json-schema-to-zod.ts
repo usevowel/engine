@@ -1,43 +1,108 @@
-/**
- * JSON Schema to Zod Converter
- * 
- * Utility for converting JSON Schema definitions to Zod schemas.
- * Used by server tool registry to create type-safe tool definitions.
- */
-
 import { z } from 'zod';
 
-/**
- * Convert JSON Schema property to Zod schema
- * 
- * Handles basic type conversions from JSON Schema to Zod.
- * Properly converts optional parameter format (anyOf with null) to Zod optional.
- * 
- * @param property - JSON Schema property definition
- * @param propertyName - Name of the property (for error messages)
- * @returns Zod schema and whether it's optional (has anyOf with null pattern)
- */
-function jsonSchemaPropertyToZod(property: any, propertyName: string): { zodType: z.ZodTypeAny; isOptional: boolean } {
-  // Check if this is an anyOf with null pattern (optional parameter format)
-  // Example: { anyOf: [{ type: 'string', description: '...' }, { type: 'null' }] }
-  if (property.anyOf && Array.isArray(property.anyOf)) {
-    const hasNull = property.anyOf.some((schema: any) => schema.type === 'null');
-    const nonNullSchemas = property.anyOf.filter((schema: any) => schema.type !== 'null');
-    
-    if (hasNull && nonNullSchemas.length === 1) {
-      // This is an optional parameter - extract the actual type schema
-      const actualSchema = nonNullSchemas[0];
-      const result = jsonSchemaPropertyToZod(actualSchema, propertyName);
-      return { zodType: result.zodType, isOptional: true };
+import { getEventSystem, EventCategory } from '../events';
+
+const registeredRefs = new Map<string, z.ZodTypeAny>();
+
+export function registerRef(refPath: string, schema: z.ZodTypeAny): void {
+  const cleanPath = refPath.replace(/^#\/\$defs\//, '').replace(/^#\/definitions\//, '');
+  registeredRefs.set(cleanPath, schema);
+}
+
+function resolveRef(refPath: string, rootSchema?: any): z.ZodTypeAny | null {
+  const cleanPath = refPath.replace(/^#\/\$defs\//, '').replace(/^#\/definitions\//, '');
+  if (registeredRefs.has(cleanPath)) {
+    return registeredRefs.get(cleanPath)!;
+  }
+  if (rootSchema) {
+    const defs = rootSchema.$defs || rootSchema.definitions || {};
+    const def = defs[cleanPath];
+    if (def) {
+      const result = jsonSchemaPropertyToZodInner(def, cleanPath);
+      registeredRefs.set(cleanPath, result.zodType);
+      return result.zodType;
     }
   }
-  
+  return null;
+}
+
+export function jsonSchemaPropertyToZod(
+  property: any,
+  propertyName: string,
+  rootSchema?: any
+): { zodType: z.ZodTypeAny; isOptional: boolean } {
+  const result = jsonSchemaPropertyToZodInner(property, propertyName, rootSchema);
+  return result;
+}
+
+function jsonSchemaPropertyToZodInner(
+  property: any,
+  propertyName: string,
+  rootSchema?: any
+): { zodType: z.ZodTypeAny; isOptional: boolean } {
+  if (property.$ref) {
+    const resolved = resolveRef(property.$ref, rootSchema);
+    if (resolved) {
+      return { zodType: resolved, isOptional: false };
+    }
+    getEventSystem().warn(EventCategory.SYSTEM, `⚠️  [JsonSchemaToZod] Unresolved $ref: ${property.$ref} for ${propertyName}, defaulting to z.any()`);
+    return { zodType: z.any(), isOptional: false };
+  }
+
+  if (property.anyOf && Array.isArray(property.anyOf)) {
+    const hasNull = property.anyOf.some((s: any) => s.type === 'null' || (s.$ref && (s.$ref as string).toLowerCase().includes('null')));
+    const nonNullSchemas = property.anyOf.filter((s: any) => s.type !== 'null');
+    
+    if (hasNull && nonNullSchemas.length === 1) {
+      return jsonSchemaPropertyToZodInner(nonNullSchemas[0], propertyName, rootSchema);
+    }
+    
+    const schemas: z.ZodTypeAny[] = [];
+    for (const s of nonNullSchemas) {
+      const r = jsonSchemaPropertyToZodInner(s, `${propertyName}[anyOf]`, rootSchema);
+      schemas.push(r.zodType);
+    }
+    if (schemas.length === 1) {
+      return { zodType: schemas[0], isOptional: false };
+    }
+    return { zodType: z.union(schemas as [z.ZodTypeAny, z.ZodTypeAny, ...z.ZodTypeAny[]]), isOptional: false };
+  }
+
+  if (property.allOf && Array.isArray(property.allOf)) {
+    let merged: any = {};
+    for (const s of property.allOf) {
+      if (s.type) merged.type = s.type;
+      if (s.properties) {
+        merged.properties = { ...merged.properties, ...s.properties };
+      }
+      if (s.required) {
+        merged.required = [...(merged.required || []), ...s.required];
+      }
+    }
+    if (merged.properties || merged.type) {
+      return jsonSchemaPropertyToZodInner(merged, propertyName, rootSchema);
+    }
+    getEventSystem().warn(EventCategory.SYSTEM, `⚠️  [JsonSchemaToZod] allOf for ${propertyName} couldn't be merged, defaulting to z.any()`);
+    return { zodType: z.any(), isOptional: false };
+  }
+
+  if (property.oneOf && Array.isArray(property.oneOf)) {
+    const schemas: z.ZodTypeAny[] = [];
+    for (const s of property.oneOf) {
+      const r = jsonSchemaPropertyToZodInner(s, `${propertyName}[oneOf]`, rootSchema);
+      schemas.push(r.zodType);
+    }
+    if (schemas.length === 1) {
+      return { zodType: schemas[0], isOptional: false };
+    }
+    return { zodType: z.union(schemas as [z.ZodTypeAny, z.ZodTypeAny, ...z.ZodTypeAny[]]), isOptional: false };
+  }
+
   const type = property.type;
   const description = property.description;
-  
-  // Basic type mapping
+
   let zodType: z.ZodTypeAny;
-  
+
   switch (type) {
     case 'string':
       zodType = z.string();
@@ -45,33 +110,33 @@ function jsonSchemaPropertyToZod(property: any, propertyName: string): { zodType
         zodType = z.enum(property.enum as [string, ...string[]]);
       }
       break;
-      
+
     case 'number':
       zodType = z.number();
       break;
-      
+
     case 'integer':
       zodType = z.number().int();
       break;
-      
+
     case 'boolean':
       zodType = z.boolean();
       break;
-      
+
     case 'array':
       if (property.items) {
-        const itemResult = jsonSchemaPropertyToZod(property.items, `${propertyName}[]`);
+        const itemResult = jsonSchemaPropertyToZodInner(property.items, `${propertyName}[]`, rootSchema);
         zodType = z.array(itemResult.zodType);
       } else {
         zodType = z.array(z.any());
       }
       break;
-      
+
     case 'object':
       if (property.properties) {
         const shape: Record<string, z.ZodTypeAny> = {};
         for (const [key, value] of Object.entries(property.properties)) {
-          const result = jsonSchemaPropertyToZod(value, key);
+          const result = jsonSchemaPropertyToZodInner(value, key, rootSchema);
           shape[key] = result.zodType;
         }
         zodType = z.object(shape);
@@ -79,46 +144,58 @@ function jsonSchemaPropertyToZod(property: any, propertyName: string): { zodType
         zodType = z.record(z.string(), z.any());
       }
       break;
-      
+
     default:
-      zodType = z.any();
+      if (!type) {
+        if (property.properties) {
+          const shape: Record<string, z.ZodTypeAny> = {};
+          for (const [key, value] of Object.entries(property.properties)) {
+            const result = jsonSchemaPropertyToZodInner(value, key, rootSchema);
+            shape[key] = result.zodType;
+          }
+          zodType = z.object(shape);
+        } else {
+          zodType = z.any();
+        }
+      } else {
+        getEventSystem().warn(EventCategory.SYSTEM, `⚠️  [JsonSchemaToZod] Unknown type: ${type} for ${propertyName}, defaulting to z.any()`);
+        zodType = z.any();
+      }
   }
-  
-  // Add description if available
+
   if (description) {
     zodType = zodType.describe(description);
   }
-  
+
   return { zodType, isOptional: false };
 }
 
-/**
- * Convert JSON Schema to Zod schema
- * 
- * @param jsonSchema - JSON Schema object (with properties, required, etc.)
- * @returns Zod schema object
- */
 export function convertJsonSchemaToZod(jsonSchema: any): z.ZodObject<any> {
-  if (!jsonSchema || jsonSchema.type !== 'object') {
+  if (!jsonSchema) {
     return z.object({});
   }
-  
-  const properties = jsonSchema.properties || {};
-  const required = jsonSchema.required || [];
-  
-  const zodShape: Record<string, z.ZodTypeAny> = {};
-  
-  for (const [key, value] of Object.entries(properties)) {
-    const { zodType, isOptional } = jsonSchemaPropertyToZod(value, key);
-    
-    const shouldBeOptional = isOptional || !required.includes(key);
-    
-    if (shouldBeOptional) {
-      zodShape[key] = zodType.optional();
-    } else {
-      zodShape[key] = zodType;
+
+  if (jsonSchema.$ref) {
+    const resolved = resolveRef(jsonSchema.$ref, jsonSchema);
+    if (resolved && resolved instanceof z.ZodObject) {
+      return resolved;
     }
+    return z.object({});
   }
-  
-  return z.object(zodShape);
+
+  if (jsonSchema.properties) {
+    const properties = jsonSchema.properties || {};
+    const required = jsonSchema.required || [];
+    const zodShape: Record<string, z.ZodTypeAny> = {};
+
+    for (const [key, value] of Object.entries(properties)) {
+      const { zodType, isOptional } = jsonSchemaPropertyToZodInner(value, key, jsonSchema);
+      const shouldBeOptional = isOptional || !required.includes(key);
+      zodShape[key] = shouldBeOptional ? zodType.optional() : zodType;
+    }
+
+    return z.object(zodShape);
+  }
+
+  return z.object({});
 }
