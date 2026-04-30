@@ -1,0 +1,68 @@
+import { createGroq } from '@ai-sdk/groq';
+import { generateText } from 'ai';
+import { jsonSchema } from '@ai-sdk/provider-utils';
+import { readFileSync, existsSync } from 'fs';
+import { resolve } from 'path';
+
+function loadEnv() {
+  const paths = [resolve(__dirname, '../.env'), resolve(__dirname, '../.dev.vars')];
+  for (const p of paths) {
+    if (!existsSync(p)) continue;
+    for (const line of readFileSync(p, 'utf8').split('\n')) {
+      const t = line.trim(); if (!t || t.startsWith('#')) continue;
+      const eq = t.indexOf('='); if (eq === -1) continue;
+      const k = t.slice(0, eq).trim(); const v = t.slice(eq + 1).trim();
+      if (k && v) process.env[k] = v;
+    }
+  }
+}
+loadEnv();
+
+// Simulate the exact flow in client-tool-proxy.ts
+import { convertSessionToolsToProxyTools } from '../src/lib/client-tool-proxy';
+
+const groq = createGroq({ apiKey: process.env.GROQ_API_KEY! });
+const model = groq('openai/gpt-oss-120b');
+
+const sessionTools = [
+  {
+    name: 'patchReportBuilderFields',
+    description: 'Mutates the report definition editor: { op: "add" } appends a field row; { op: "remove", index } removes by index; { op: "update", index, partial } merges partial Sfdc field definition.',
+    parameters: {
+      type: 'object',
+      properties: {
+        operation: {
+          type: 'object',
+          description: 'Discriminated union: { op: "add" } | { op: "remove", index: number } | { op: "update", index: number, partial: object }',
+        },
+      },
+      required: ['operation'],
+    },
+  },
+];
+
+const proxyTools = convertSessionToolsToProxyTools(sessionTools);
+
+// Now use with generateText
+async function test(label: string, prompt: string) {
+  console.log(`\n--- ${label} ---`);
+  try {
+    const result = await generateText({
+      model,
+      maxSteps: 2,
+      tools: proxyTools,
+      prompt,
+    });
+    if (result.toolCalls?.length) {
+      console.log(`✅ Args: ${JSON.stringify(result.toolCalls[0].input)}`);
+    } else {
+      console.log(`📝 Text: ${result.text?.slice(0, 200)}`);
+    }
+  } catch (e: any) {
+    console.log(`❌ Error: ${e.message?.slice(0, 300)}`);
+  }
+}
+
+await test('ADD', 'Call patchReportBuilderFields with add operation');
+await test('REMOVE', 'Call patchReportBuilderFields to remove field at index 2');
+await test('UPDATE', 'Call patchReportBuilderFields to update title at index 0');

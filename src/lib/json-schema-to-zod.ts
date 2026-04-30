@@ -141,7 +141,7 @@ function jsonSchemaPropertyToZodInner(
         }
         zodType = z.object(shape);
       } else {
-        zodType = z.record(z.string(), z.any());
+        zodType = z.object({}).passthrough();
       }
       break;
 

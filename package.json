@@ -27,7 +27,8 @@
     "version:patch": "bun run scripts/version.ts --type patch",
     "version:check": "bun run scripts/version.ts --dry-run",
     "test": "bun test",
-    "test:config": "bun test test/r2-config-loader.test.ts"
+    "test:config": "bun test test/r2-config-loader.test.ts",
+    "test:deep-tool": "bun run test/deep-tool-groq-e2e.ts"
   },
   "dependencies": {
     "@ai-sdk/cerebras": "^1.0.31",
