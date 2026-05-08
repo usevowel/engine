@@ -54,6 +54,21 @@ presets:
     vad:
       provider: "none"
       enabled: false
+  text-only:
+    name: "Text Only"
+    description: "Text-only mode with no STT or TTS. External TTS/STT (e.g., HeyGen avatars) can consume text output directly."
+    llm:
+      provider: "groq"
+      model: "moonshotai/kimi-k2-instruct-0905"
+      tokensPerHourRate: 100000
+      costMultiplier: 0.5
+    stt:
+      provider: "none"
+    tts:
+      provider: "none"
+    vad:
+      provider: "none"
+      enabled: false
 
 defaultPreset: "prime"
 
