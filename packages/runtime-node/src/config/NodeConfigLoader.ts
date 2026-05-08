@@ -62,6 +62,8 @@ export function buildSTTConfigFromEnv(provider: string): unknown {
           ? parseInt(env.ECHOLINE_STT_SAMPLE_RATE, 10)
           : 24000,
       };
+    case 'none':
+      return {};
     default:
       return {};
   }
@@ -103,6 +105,8 @@ export function buildTTSConfigFromEnv(provider: string): unknown {
           : 24000,
         format: 'pcm16' as const,
       };
+    case 'none':
+      return {};
     default:
       return {};
   }

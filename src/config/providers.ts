@@ -85,6 +85,10 @@ export const OpenAICompatibleSTTConfig = z.object({
   sampleRate: z.number().default(24000),
 });
 
+export const NoneSTTConfig = z.object({});
+
+export const NoneTTSConfig = z.object({});
+
 export const OpenAICompatibleTTSConfig = z.object({
   apiKey: z.string().optional(),
   baseUrl: z.string().url().default('http://localhost:8000/v1'),

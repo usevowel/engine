@@ -15,6 +15,8 @@ import { GrokSTT } from '../../../packages/provider-grok-stt/src';
 import { GrokTTS } from '../../../packages/provider-grok-tts/src';
 import { OpenAICompatibleSTT } from './OpenAICompatibleSTT';
 import { OpenAICompatibleTTS } from './OpenAICompatibleTTS';
+import { NoneSTTProvider } from './NoneSTTProvider';
+import { NoneTTSProvider } from './NoneTTSProvider';
 import {
   GroqWhisperConfig,
   MistralVoxtralRealtimeConfig,
@@ -22,6 +24,8 @@ import {
   DeepgramTTSConfig,
   GrokSTTConfig,
   GrokTTSConfig,
+  NoneSTTConfig,
+  NoneTTSConfig,
   OpenAICompatibleSTTConfig,
   OpenAICompatibleTTSConfig,
 } from '../../config/providers';
@@ -199,6 +203,37 @@ export function registerOSSProviders(): void {
         format: config.format,
       });
     },
+  });
+
+  // No-op STT/TTS providers (text-only mode)
+  ProviderRegistry.registerSTT({
+    name: 'none',
+    category: 'stt',
+    capabilities: {
+      supportsStreaming: false,
+      supportsVAD: false,
+      supportsLanguageDetection: false,
+      supportsMultipleVoices: false,
+      requiresNetwork: false,
+      supportsGPU: false,
+    },
+    configSchema: NoneSTTConfig,
+    factory: () => new NoneSTTProvider(),
+  });
+
+  ProviderRegistry.registerTTS({
+    name: 'none',
+    category: 'tts',
+    capabilities: {
+      supportsStreaming: false,
+      supportsVAD: false,
+      supportsLanguageDetection: false,
+      supportsMultipleVoices: false,
+      requiresNetwork: false,
+      supportsGPU: false,
+    },
+    configSchema: NoneTTSConfig,
+    factory: () => new NoneTTSProvider(),
   });
 
   // VAD — 'none' only (Silero registered by Node runtime)

@@ -886,20 +886,10 @@ export async function generateResponse(ws: ServerWebSocket<SessionData>, options
             }
             getEventSystem().info(EventCategory.AUDIO, `🔊 Streaming TTS chunk: "${chunkToSynthesize.substring(0, 50)}..."`);
 
-            // Start audio content part if not started
-            if (!audioStarted) {
-              audioStarted = true;
-              logResponseDebug('starting audio content part for streaming response', {
-                chunkLength: chunkToSynthesize.length,
-              }, EventCategory.AUDIO);
-              sendContentPartAdded(ws, responseId, itemId, 0, 1, { type: 'audio', transcript: '' });
-            }
-
             // Synthesize chunk to audio using provider
             if (!data.providers) {
               data.providers = await SessionManager.getProviders(data.runtimeConfig!);
             }
-            // Get current language from session state
             const currentLanguage = data.language?.current || 
                                    data.language?.configured || 
                                    'en';
@@ -908,83 +898,89 @@ export async function generateResponse(ws: ServerWebSocket<SessionData>, options
             
             const audioChunks = await synthesizeTextWithProvider(
               data.providers,
-              chunkToSynthesize, // Use filtered chunk
+              chunkToSynthesize,
               voiceForTTS,
               speakingRate,
-              data.currentTraceId, // Pass unified trace ID for agent analytics
+              data.currentTraceId,
               data.sessionId,
               data.sessionKey,
-              'direct', // TODO: Detect connection paradigm
-              currentLanguage // Use current language from session state
+              'direct',
+              currentLanguage
             );
             const ttsEnd = Date.now();
-            latency.ttsChunks.push({ text: chunkToSynthesize.substring(0, 30), start: ttsStart, end: ttsEnd });
-            getEventSystem().info(EventCategory.AUDIO, `⏱️  TTS synthesis: ${ttsEnd - ttsStart}ms for ${chunkToSynthesize.length} chars`);
-            
-            // Track TTS completion for the active turn (last chunk only)
-            if (data.turnTracker && latency.ttsChunks.length === 1) {
-              const turnTracker = data.turnTracker as any; // Avoid circular deps
-              // Calculate total TTS duration from all chunks
-              const totalTTSDuration = latency.ttsChunks.reduce((sum, chunk) => sum + (chunk.end - chunk.start), 0);
-              turnTracker.trackTTSComplete();
-            }
 
-            // Check again after TTS synthesis completes (interrupt may have occurred during synthesis)
-            if (turnAbort.signal.aborted) {
-              getEventSystem().info(EventCategory.AUDIO, `⚡ Response ${responseId} cancelled after TTS synthesis - discarding audio`);
-              logResponseDebug('early return after streaming TTS synthesis', {
-                synthesizedAudioChunkCount: audioChunks.length,
-                chunkLength: chunkToSynthesize.length,
-                reason: 'turn aborted after TTS synthesis',
-              }, EventCategory.AUDIO);
-              finalizeCancelledResponse();
-              return;
-            }
+            if (audioChunks.length > 0) {
+              latency.ttsChunks.push({ text: chunkToSynthesize.substring(0, 30), start: ttsStart, end: ttsEnd });
+              getEventSystem().info(EventCategory.AUDIO, `⏱️  TTS synthesis: ${ttsEnd - ttsStart}ms for ${chunkToSynthesize.length} chars`);
+              
+              if (data.turnTracker && latency.ttsChunks.length === 1) {
+                const turnTracker = data.turnTracker as any;
+                const totalTTSDuration = latency.ttsChunks.reduce((sum, chunk) => sum + (chunk.end - chunk.start), 0);
+                turnTracker.trackTTSComplete();
+              }
 
-            allAudioChunks.push(...audioChunks);
-
-            // Send transcript delta (use filtered chunk)
-            logResponseDebug('sending streaming audio transcript delta', {
-              transcriptChunkLength: chunkToSynthesize.length,
-              synthesizedAudioChunkCount: audioChunks.length,
-            }, EventCategory.AUDIO);
-            sendAudioTranscriptDelta(ws, responseId, itemId, chunkToSynthesize);
-
-            // Stream audio chunks
-            for (const chunk of audioChunks) {
               if (turnAbort.signal.aborted) {
-                getEventSystem().info(EventCategory.AUDIO, `⚡ Response ${responseId} cancelled during audio streaming - stopping`);
-                logResponseDebug('early return during streaming audio delta send', {
-                  pendingChunkBytes: chunk.byteLength,
+                getEventSystem().info(EventCategory.AUDIO, `⚡ Response ${responseId} cancelled after TTS synthesis - discarding audio`);
+                logResponseDebug('early return after streaming TTS synthesis', {
                   synthesizedAudioChunkCount: audioChunks.length,
-                  reason: 'turn aborted during audio streaming',
+                  chunkLength: chunkToSynthesize.length,
+                  reason: 'turn aborted after TTS synthesis',
                 }, EventCategory.AUDIO);
                 finalizeCancelledResponse();
                 return;
               }
 
-              // Track first audio sent for TTFS (user speech end → first AI audio sent)
-              if (latency.firstAudioSent === 0) {
-                latency.firstAudioSent = Date.now();
-                const ttfs = data.speechEndTime ? latency.firstAudioSent - data.speechEndTime : 0;
-                getEventSystem().info(EventCategory.AUDIO, `🎵 First audio sent: TTFS = ${ttfs}ms (user speech end → first AI audio)`);
-                
-                // Stop acknowledgement monitoring and typing sounds when actual audio starts
-                if (data.acknowledgementService) {
-                  data.acknowledgementService.stopMonitoring();
-                }
-                if (data.typingSoundService) {
-                  data.typingSoundService.stopPlaying();
-                }
+              if (!audioStarted) {
+                audioStarted = true;
+                logResponseDebug('starting audio content part for streaming response', {
+                  chunkLength: chunkToSynthesize.length,
+                }, EventCategory.AUDIO);
+                sendContentPartAdded(ws, responseId, itemId, 0, 1, { type: 'audio', transcript: '' });
               }
 
-              sendAudioDelta(ws, responseId, itemId, chunk);
-            }
+              allAudioChunks.push(...audioChunks);
 
-            logResponseDebug('completed streaming audio delta batch', {
-              synthesizedAudioChunkCount: audioChunks.length,
-              transcriptChunkLength: chunkToSynthesize.length,
-            }, EventCategory.AUDIO);
+              logResponseDebug('sending streaming audio transcript delta', {
+                transcriptChunkLength: chunkToSynthesize.length,
+                synthesizedAudioChunkCount: audioChunks.length,
+              }, EventCategory.AUDIO);
+              sendAudioTranscriptDelta(ws, responseId, itemId, chunkToSynthesize);
+
+              for (const chunk of audioChunks) {
+                if (turnAbort.signal.aborted) {
+                  getEventSystem().info(EventCategory.AUDIO, `⚡ Response ${responseId} cancelled during audio streaming - stopping`);
+                  logResponseDebug('early return during streaming audio delta send', {
+                    pendingChunkBytes: chunk.byteLength,
+                    synthesizedAudioChunkCount: audioChunks.length,
+                    reason: 'turn aborted during audio streaming',
+                  }, EventCategory.AUDIO);
+                  finalizeCancelledResponse();
+                  return;
+                }
+
+                if (latency.firstAudioSent === 0) {
+                  latency.firstAudioSent = Date.now();
+                  const ttfs = data.speechEndTime ? latency.firstAudioSent - data.speechEndTime : 0;
+                  getEventSystem().info(EventCategory.AUDIO, `🎵 First audio sent: TTFS = ${ttfs}ms (user speech end → first AI audio)`);
+                  
+                  if (data.acknowledgementService) {
+                    data.acknowledgementService.stopMonitoring();
+                  }
+                  if (data.typingSoundService) {
+                    data.typingSoundService.stopPlaying();
+                  }
+                }
+
+                sendAudioDelta(ws, responseId, itemId, chunk);
+              }
+
+              logResponseDebug('completed streaming audio delta batch', {
+                synthesizedAudioChunkCount: audioChunks.length,
+                transcriptChunkLength: chunkToSynthesize.length,
+              }, EventCategory.AUDIO);
+            } else {
+              getEventSystem().debug(EventCategory.TTS, `⏭️ No audio synthesized for chunk (TTS provider: ${data.providers?.tts.name})`);
+            }
           }
         } else {
           // Explicit mode: send text delta but skip TTS synthesis
@@ -1297,15 +1293,10 @@ export async function generateResponse(ws: ServerWebSocket<SessionData>, options
       const ttsStart = Date.now();
       getEventSystem().info(EventCategory.SESSION, `🔊 [Buffered Mode] Synthesizing complete response: "${fullText.substring(0, 50)}..."`);
       
-      // Start audio content part
-      audioStarted = true;
-      sendContentPartAdded(ws, responseId, itemId, 0, 1, { type: 'audio', transcript: '' });
-      
       // Synthesize entire text
       if (!data.providers) {
         data.providers = await SessionManager.getProviders(data.runtimeConfig!);
       }
-      // Get current language from session state
       const currentLanguage = data.language?.current || 
                              data.language?.configured || 
                              'en';
@@ -1317,43 +1308,47 @@ export async function generateResponse(ws: ServerWebSocket<SessionData>, options
         fullText,
         voiceForTTS,
         speakingRate,
-        data.currentTraceId, // Pass unified trace ID for agent analytics
+        data.currentTraceId,
         data.sessionId,
               data.sessionKey,
-              'direct', // TODO: Detect connection paradigm
-              currentLanguage // Use current language from session state
+              'direct',
+              currentLanguage
             );
       const ttsEnd = Date.now();
-      getEventSystem().info(EventCategory.TTS, `⏱️  [Buffered Mode] TTS synthesis: ${ttsEnd - ttsStart}ms for ${fullText.length} chars`);
-      
-      allAudioChunks.push(...audioChunks);
-      
-      // Send transcript delta
-      logResponseDebug('sending buffered audio transcript delta', {
-        transcriptChunkLength: fullText.length,
-        synthesizedAudioChunkCount: audioChunks.length,
-      }, EventCategory.AUDIO);
-      sendAudioTranscriptDelta(ws, responseId, itemId, fullText);
-      
-      // Stream audio chunks
-      for (const chunk of audioChunks) {
-        if (turnAbort.signal.aborted) {
-          logResponseDebug('early return during buffered audio delta send', {
-            pendingChunkBytes: chunk.byteLength,
-            synthesizedAudioChunkCount: audioChunks.length,
-            reason: 'turn aborted during buffered audio streaming',
-          }, EventCategory.AUDIO);
-          finalizeCancelledResponse();
-          return;
-        }
-        
-        sendAudioDelta(ws, responseId, itemId, chunk);
-      }
 
-      logResponseDebug('completed buffered audio delta batch', {
-        synthesizedAudioChunkCount: audioChunks.length,
-        transcriptChunkLength: fullText.length,
-      }, EventCategory.AUDIO);
+      if (audioChunks.length > 0) {
+        getEventSystem().info(EventCategory.TTS, `⏱️  [Buffered Mode] TTS synthesis: ${ttsEnd - ttsStart}ms for ${fullText.length} chars`);
+        
+        audioStarted = true;
+        sendContentPartAdded(ws, responseId, itemId, 0, 1, { type: 'audio', transcript: '' });
+        
+        allAudioChunks.push(...audioChunks);
+        
+        logResponseDebug('sending buffered audio transcript delta', {
+          transcriptChunkLength: fullText.length,
+          synthesizedAudioChunkCount: audioChunks.length,
+        }, EventCategory.AUDIO);
+        sendAudioTranscriptDelta(ws, responseId, itemId, fullText);
+        
+        for (const chunk of audioChunks) {
+          if (turnAbort.signal.aborted) {
+            logResponseDebug('early return during buffered audio delta send', {
+              pendingChunkBytes: chunk.byteLength,
+              synthesizedAudioChunkCount: audioChunks.length,
+              reason: 'turn aborted during buffered audio streaming',
+            }, EventCategory.AUDIO);
+            finalizeCancelledResponse();
+            return;
+          }
+          
+          sendAudioDelta(ws, responseId, itemId, chunk);
+        }
+
+        logResponseDebug('completed buffered audio delta batch', {
+          synthesizedAudioChunkCount: audioChunks.length,
+          transcriptChunkLength: fullText.length,
+        }, EventCategory.AUDIO);
+      }
     }
     
     // If a tool was called, don't flush text or complete the response
@@ -1436,18 +1431,9 @@ export async function generateResponse(ws: ServerWebSocket<SessionData>, options
         const ttsStart = Date.now();
         getEventSystem().info(EventCategory.AUDIO, `🔊 Final TTS chunk: "${chunkToSynthesize.substring(0, 50)}..."`);
         
-        if (!audioStarted) {
-          audioStarted = true;
-          logResponseDebug('starting audio content part for final chunk flush', {
-            chunkLength: chunkToSynthesize.length,
-          }, EventCategory.AUDIO);
-          sendContentPartAdded(ws, responseId, itemId, 0, 1, { type: 'audio', transcript: '' });
-        }
-        
         if (!data.providers) {
           data.providers = await SessionManager.getProviders(data.runtimeConfig!);
         }
-        // Get current language from session state
         const currentLanguage = data.language?.current || 
                                data.language?.configured || 
                                'en';
@@ -1459,57 +1445,68 @@ export async function generateResponse(ws: ServerWebSocket<SessionData>, options
           chunkToSynthesize,
           voiceForTTS,
           speakingRate,
-          data.currentTraceId, // Pass unified trace ID for agent analytics
+          data.currentTraceId,
           data.sessionId,
               data.sessionKey,
-              'direct', // TODO: Detect connection paradigm
-              currentLanguage // Use current language from session state
+              'direct',
+              currentLanguage
             );
         const ttsEnd = Date.now();
-        latency.ttsChunks.push({ text: chunkToSynthesize.substring(0, 30), start: ttsStart, end: ttsEnd });
-        getEventSystem().info(EventCategory.TTS, `⏱️  TTS synthesis (final): ${ttsEnd - ttsStart}ms for ${chunkToSynthesize.length} chars`);
-        allAudioChunks.push(...audioChunks);
-        
-        logResponseDebug('sending final audio transcript delta', {
-          transcriptChunkLength: chunkToSynthesize.length,
-          synthesizedAudioChunkCount: audioChunks.length,
-        }, EventCategory.AUDIO);
-        sendAudioTranscriptDelta(ws, responseId, itemId, chunkToSynthesize);
-        
-        for (const chunk of audioChunks) {
-          if (turnAbort.signal.aborted) {
-            logResponseDebug('early return during final audio delta send', {
-              pendingChunkBytes: chunk.byteLength,
-              synthesizedAudioChunkCount: audioChunks.length,
-              reason: 'turn aborted during final audio streaming',
-            }, EventCategory.AUDIO);
-            finalizeCancelledResponse();
-            return;
-          }
-          
-          // Track first audio sent for TTFS
-          if (latency.firstAudioSent === 0) {
-            latency.firstAudioSent = Date.now();
-            const ttfs = data.speechEndTime ? latency.firstAudioSent - data.speechEndTime : 0;
-            getEventSystem().info(EventCategory.AUDIO, `🎵 First audio sent: TTFS = ${ttfs}ms`);
-            
-            // Stop acknowledgement monitoring and typing sounds when actual audio starts
-            if (data.acknowledgementService) {
-              data.acknowledgementService.stopMonitoring();
-            }
-            // Stop typing sounds when actual audio starts
-            if (data.typingSoundService) {
-              data.typingSoundService.stopPlaying();
-            }
-          }
-          
-          sendAudioDelta(ws, responseId, itemId, chunk);
-        }
 
-        logResponseDebug('completed final audio delta batch', {
-          synthesizedAudioChunkCount: audioChunks.length,
-          transcriptChunkLength: chunkToSynthesize.length,
-        }, EventCategory.AUDIO);
+        if (audioChunks.length > 0) {
+          latency.ttsChunks.push({ text: chunkToSynthesize.substring(0, 30), start: ttsStart, end: ttsEnd });
+          getEventSystem().info(EventCategory.TTS, `⏱️  TTS synthesis (final): ${ttsEnd - ttsStart}ms for ${chunkToSynthesize.length} chars`);
+          
+          if (!audioStarted) {
+            audioStarted = true;
+            logResponseDebug('starting audio content part for final chunk flush', {
+              chunkLength: chunkToSynthesize.length,
+            }, EventCategory.AUDIO);
+            sendContentPartAdded(ws, responseId, itemId, 0, 1, { type: 'audio', transcript: '' });
+          }
+          
+          allAudioChunks.push(...audioChunks);
+          
+          logResponseDebug('sending final audio transcript delta', {
+            transcriptChunkLength: chunkToSynthesize.length,
+            synthesizedAudioChunkCount: audioChunks.length,
+          }, EventCategory.AUDIO);
+          sendAudioTranscriptDelta(ws, responseId, itemId, chunkToSynthesize);
+          
+          for (const chunk of audioChunks) {
+            if (turnAbort.signal.aborted) {
+              logResponseDebug('early return during final audio delta send', {
+                pendingChunkBytes: chunk.byteLength,
+                synthesizedAudioChunkCount: audioChunks.length,
+                reason: 'turn aborted during final audio streaming',
+              }, EventCategory.AUDIO);
+              finalizeCancelledResponse();
+              return;
+            }
+            
+            if (latency.firstAudioSent === 0) {
+              latency.firstAudioSent = Date.now();
+              const ttfs = data.speechEndTime ? latency.firstAudioSent - data.speechEndTime : 0;
+              getEventSystem().info(EventCategory.AUDIO, `🎵 First audio sent: TTFS = ${ttfs}ms`);
+              
+              if (data.acknowledgementService) {
+                data.acknowledgementService.stopMonitoring();
+              }
+              if (data.typingSoundService) {
+                data.typingSoundService.stopPlaying();
+              }
+            }
+            
+            sendAudioDelta(ws, responseId, itemId, chunk);
+          }
+
+          logResponseDebug('completed final audio delta batch', {
+            synthesizedAudioChunkCount: audioChunks.length,
+            transcriptChunkLength: chunkToSynthesize.length,
+          }, EventCategory.AUDIO);
+        } else {
+          getEventSystem().debug(EventCategory.TTS, `⏭️ No audio synthesized for final chunk (TTS provider: ${data.providers?.tts.name})`);
+        }
       }
     }
     

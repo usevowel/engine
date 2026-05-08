@@ -165,7 +165,13 @@ export async function synthesizeTextWithProvider(
   language?: string // ISO 639-1 language code
 ): Promise<Uint8Array[]> {
   const chunks: Uint8Array[] = [];
-  
+
+  // No-op TTS: return empty immediately without any processing
+  if (providers.tts.name === 'none') {
+    getEventSystem().debug(EventCategory.TTS, '⏭️ [TTS] No-op TTS provider — skipping synthesis');
+    return chunks;
+  }
+
   // Strip markdown symbols before TTS synthesis to prevent TTS from speaking them
   // (e.g., asterisks are spoken as "asterisk" which disrupts the flow)
   const cleanedText = stripMarkdown(text);
