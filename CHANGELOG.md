@@ -7,7 +7,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-05-10
+
 ### Added
+
+#### "none" STT/TTS/VAD Providers for Text-Only Mode
+
+Added no-op provider implementations for STT, TTS, and VAD that disable speech IO.
+
+**Features:**
+- `NoneSTTProvider` — returns empty transcription, short-circuits all streaming
+- `NoneTTSProvider` — returns empty audio, short-circuits all synthesis
+- No-op VAD provider with VAD disabled
+- Registered in `OSSProviderRegistration` with empty Zod config schemas
+- Provider selection via `STT_PROVIDER=none`, `TTS_PROVIDER=none`, `VAD_PROVIDER=none`
+
+#### Text-Only Preset Configuration
+
+Added `text-only` preset to all engine config YAMLs (dev, staging, testing, production, billing-test).
+
+**Preset Definition:**
+```yaml
+text-only:
+  stt:
+    provider: "none"
+  tts:
+    provider: "none"
+  vad:
+    provider: "none"
+    enabled: false
+```
 
 #### STT/TTS Provider Selection via Token Configuration
 
@@ -61,6 +90,7 @@ This is a **development-only feature**. In production, speech providers should b
 
 ---
 
-[Unreleased]: https://github.com/usevowel/engine/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/usevowel/engine/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/usevowel/engine/releases/tag/v0.2.0
 [0.1.0]: https://github.com/usevowel/engine/releases/tag/v0.1.0
 [0.0.1]: https://github.com/usevowel/engine/releases/tag/v0.0.1
