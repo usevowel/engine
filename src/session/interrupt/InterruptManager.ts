@@ -126,6 +126,19 @@ export function handleInterruptSpeechStart(
   if (!responseId) return;
 
   const policy = getPolicy(data);
+
+  // Standalone VAD (silero etc.) cannot produce transcript evidence for the
+  // confirm_before_cancel policy — that requires handleInterruptTranscript to
+  // be called from streaming STT partials.  If the STT provider is batch-only
+  // (not streaming), no partials will ever arrive, so the interrupt can never
+  // confirm.  Force immediate mode so the interrupt fires on speech_start.
+  const isStandaloneVad = source === 'server_vad';
+  const sttIsStreaming = data.providers?.stt?.type === 'streaming';
+  if (isStandaloneVad && !sttIsStreaming) {
+    confirmInterrupt(ws, 'turn_detected', `${source}:immediate_batch_stt`);
+    return;
+  }
+
   if (policy.mode === 'immediate') {
     confirmInterrupt(ws, 'turn_detected', `${source}:immediate`);
     return;
