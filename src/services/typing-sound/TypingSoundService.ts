@@ -125,6 +125,10 @@ export class TypingSoundService {
     this.ws = ws;
     this.typingResponseId = responseId;
     this.isPlaying = true;
+    ws.data.outputAudioActive = true;
+    if (!ws.data.outputAudioStartedAt) {
+      ws.data.outputAudioStartedAt = Date.now();
+    }
 
     // Create item for typing sound
     const itemId = generateItemId();
@@ -164,6 +168,10 @@ export class TypingSoundService {
     // Send audio done if we have active connection
     if (this.ws && this.typingResponseId && this.typingItemId) {
       sendAudioDone(this.ws, this.typingResponseId, this.typingItemId, 0, 2);
+    }
+
+    if (this.ws) {
+      this.ws.data.outputAudioActive = false;
     }
 
     getEventSystem().info(EventCategory.SESSION, '⏹️  [TypingSoundService] Stopped typing sounds', {

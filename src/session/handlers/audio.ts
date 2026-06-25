@@ -46,6 +46,29 @@ import {
   resetStreamingSttDebug,
 } from '../utils/stt-audio-debug';
 import { SessionDebugDumpManager } from '../utils/session-debug-dump-manager';
+
+/**
+ * Attenuate PCM16 little-endian audio by a linear factor (0.0-1.0).
+ * Used as an echo suppression safety net: reduces echo energy in incoming
+ * mic audio while preserving genuine speech loud enough to cut through.
+ */
+function attenuatePCM16(data: Uint8Array, factor: number): Uint8Array {
+  if (data.length < 2) return data;
+  const result = new Uint8Array(data.length);
+  for (let i = 0; i + 1 < data.length; i += 2) {
+    let sample = (data[i + 1] << 8) | data[i];
+    if (sample >= 0x8000) sample -= 0x10000;
+    sample = Math.round(sample * factor);
+    sample = Math.max(-32768, Math.min(32767, sample));
+    if (sample < 0) sample += 0x10000;
+    result[i] = sample & 0xff;
+    result[i + 1] = (sample >> 8) & 0xff;
+  }
+  return result;
+}
+
+/** Echo suppression attenuation factor applied to incoming audio during AI output (-10dB). */
+const ECHO_ATTENUATION_FACTOR = 0.3;
 // Forward declaration - will be imported from response/index.ts
 let generateResponse: (ws: ServerWebSocket<SessionData>, options?: any) => Promise<void>;
 
@@ -275,6 +298,14 @@ export async function handleAudioAppend(ws: ServerWebSocket<SessionData>, event:
     data.smallChunkWarningLogged = true;
   }
   
+  // Echo suppression safety net: attenuate incoming audio while the AI is
+  // outputting TTS, unless the client has an active barge-in detector (in
+  // which case the client already filtered echo and we trust the incoming audio).
+  let processedChunk = audioChunk;
+  if (data.outputAudioActive && !data.isClientBargeInActive) {
+    processedChunk = attenuatePCM16(audioChunk, ECHO_ATTENUATION_FACTOR);
+  }
+  
   // Get providers
   if (!data.providers) {
     data.providers = await SessionManager.getProviders(data.runtimeConfig!);
@@ -304,10 +335,10 @@ export async function handleAudioAppend(ws: ServerWebSocket<SessionData>, event:
   if (data.sttStream) {
     try {
       await data.sttStream.waitForConnection?.();
-      await data.sttStream.sendAudio(audioChunk);
-      appendStreamingSttDebugPcm(data, audioChunk);
-      appendStreamingSttSessionDebugIfEligible(data, audioChunk);
-      SessionDebugDumpManager.appendSessionPcmForSttEventsDebugIfEligible(data, audioChunk);
+      await data.sttStream.sendAudio(processedChunk);
+      appendStreamingSttDebugPcm(data, processedChunk);
+      appendStreamingSttSessionDebugIfEligible(data, processedChunk);
+      SessionDebugDumpManager.appendSessionPcmForSttEventsDebugIfEligible(data, processedChunk);
     } catch (error) {
       getEventSystem().error(EventCategory.STT, '❌ Failed to send audio to STT stream:', error instanceof Error ? error : new Error(String(error)));
     }
@@ -317,20 +348,20 @@ export async function handleAudioAppend(ws: ServerWebSocket<SessionData>, event:
   
   // Append to buffer (still needed for batch mode and fallback)
   if (!data.audioBuffer) {
-    data.audioBuffer = audioChunk;
+    data.audioBuffer = processedChunk;
     data.audioBufferStartMs = data.totalAudioMs;
   } else {
-    data.audioBuffer = concatenateAudio([data.audioBuffer, audioChunk]);
+    data.audioBuffer = concatenateAudio([data.audioBuffer, processedChunk]);
   }
   
   // Update total audio time (PCM16 mono — sample rate from runtime config)
   const sr = getPcmSampleRateHz(data);
-  const chunkDurationMs = (audioChunk.length / 2 / sr) * 1000;
+  const chunkDurationMs = (processedChunk.length / 2 / sr) * 1000;
   data.totalAudioMs += chunkDurationMs;
   
   // If VAD is enabled and not integrated, process audio for speech detection
   if (data.vadEnabled && data.config.turn_detection && !SessionManager.isVADIntegrated(data.runtimeConfig!)) {
-    await processVAD(ws, audioChunk, data.totalAudioMs, async () => {
+    await processVAD(ws, processedChunk, data.totalAudioMs, async () => {
       await handleAudioCommit(ws, { type: 'input_audio_buffer.commit' });
     });
   }

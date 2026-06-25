@@ -79,6 +79,7 @@ export async function executeSpeakTool(
       (sessionData.responseTurnAbort?.signal.aborted ?? false);
     if (turnInvalid) {
       getEventSystem().info(EventCategory.AUDIO, `⚡ Response ${responseId} cancelled during audio streaming - stopping`);
+      sessionData.outputAudioActive = false;
       return { success: false, error: 'Response cancelled' };
     }
     
@@ -98,9 +99,14 @@ export async function executeSpeakTool(
       }
     }
     
+    sessionData.outputAudioActive = true;
+    if (!sessionData.outputAudioStartedAt) {
+      sessionData.outputAudioStartedAt = Date.now();
+    }
     sendAudioDelta(ws, responseId, itemId, chunk);
   }
   
+  sessionData.outputAudioActive = false;
   return { 
     success: true, 
     addToHistory: true 

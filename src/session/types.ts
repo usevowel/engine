@@ -70,6 +70,19 @@ export interface SessionData {
    * same `responseId`.
    */
   responseCancelEventSentForIds?: Set<string>;
+  /**
+   * True while TTS audio is actively being streamed to the client.
+   * Used as a safety-net gate to attenuate incoming mic audio during output
+   * (echo suppression). Distinct from `currentResponseId` which also covers
+   * non-audio turns (text-only tools, silent LLM thinking).
+   */
+  outputAudioActive: boolean;
+  /** Timestamp of the first audio delta sent in the current output turn. */
+  outputAudioStartedAt?: number;
+  /** Echo suppression mode negotiated with the client. */
+  echoSuppressionMode?: 'off' | 'client' | 'server' | 'auto';
+  /** True when the client has an active barge-in detector (engine trusts incoming audio). */
+  isClientBargeInActive?: boolean;
   interruptPolicy?: InterruptPolicyConfig;
   pendingInterrupt?: PendingInterruptState | null;
   vadEnabled: boolean;

@@ -453,6 +453,14 @@ export async function handleSessionUpdate(ws: ServerWebSocket<SessionData>, even
     getEventSystem().info(EventCategory.LLM, `   MaxContextMessages: ${maxContextMessages} ${data.agentConfig ? '(from token)' : '(default)'}`);
   }
   
+  // Parse echo suppression config from client (if provided)
+  const clientEchoConfig = (event.session as any)?.echoSuppression;
+  if (clientEchoConfig) {
+    data.echoSuppressionMode = clientEchoConfig.mode ?? 'auto';
+    data.isClientBargeInActive = clientEchoConfig.mode === 'client' || clientEchoConfig.mode === 'auto';
+    getEventSystem().info(EventCategory.SESSION, `🔇 Echo suppression: mode=${data.echoSuppressionMode}, clientBargeIn=${data.isClientBargeInActive}`);
+  }
+  
   // Send confirmation with actual turn_detection config
   sendSessionUpdated(ws, data.sessionId, data.model, data.config);
   

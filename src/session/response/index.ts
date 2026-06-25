@@ -643,6 +643,7 @@ export async function generateResponse(ws: ServerWebSocket<SessionData>, options
       }
 
       responseFinalized = true;
+      data.outputAudioActive = false;
       tryEmitResponseCancelled(ws, responseId, reason);
     };
     
@@ -971,6 +972,10 @@ export async function generateResponse(ws: ServerWebSocket<SessionData>, options
                   }
                 }
 
+                data.outputAudioActive = true;
+                if (!data.outputAudioStartedAt) {
+                  data.outputAudioStartedAt = Date.now();
+                }
                 sendAudioDelta(ws, responseId, itemId, chunk);
               }
 
@@ -1341,6 +1346,10 @@ export async function generateResponse(ws: ServerWebSocket<SessionData>, options
             return;
           }
           
+          data.outputAudioActive = true;
+          if (!data.outputAudioStartedAt) {
+            data.outputAudioStartedAt = Date.now();
+          }
           sendAudioDelta(ws, responseId, itemId, chunk);
         }
 
@@ -1377,6 +1386,7 @@ export async function generateResponse(ws: ServerWebSocket<SessionData>, options
       // Mark response as incomplete (waiting for tool output)
       sendResponseDone(ws, responseId, 'incomplete', [], null);
       responseFinalized = true;
+      data.outputAudioActive = false;
       
       return;
     }
@@ -1497,6 +1507,10 @@ export async function generateResponse(ws: ServerWebSocket<SessionData>, options
               }
             }
             
+            data.outputAudioActive = true;
+            if (!data.outputAudioStartedAt) {
+              data.outputAudioStartedAt = Date.now();
+            }
             sendAudioDelta(ws, responseId, itemId, chunk);
           }
 
@@ -1675,6 +1689,7 @@ export async function generateResponse(ws: ServerWebSocket<SessionData>, options
     // Send response.done
     sendResponseDone(ws, responseId, 'completed', [outputItem], null);
     responseFinalized = true;
+    data.outputAudioActive = false;
     
     // Reset tool retry count on successful response
     if (data.toolRetryCount !== undefined || data.lastToolError !== undefined) {
@@ -1808,6 +1823,7 @@ export async function generateResponse(ws: ServerWebSocket<SessionData>, options
       sendResponseDone(ws, responseId, 'completed', outputItem ? [outputItem] : [], null);
       responseFinalized = true;
     }
+    data.outputAudioActive = false;
     getEventSystem().info(EventCategory.SESSION, `✅ Response complete: ${responseId}`);
     
     // Reset tool retry count on successful response
@@ -1819,6 +1835,7 @@ export async function generateResponse(ws: ServerWebSocket<SessionData>, options
     
   } catch (error) {
     getEventSystem().error(EventCategory.SESSION, '❌ Response generation error:', error instanceof Error ? error : new Error(String(error)));
+    data.outputAudioActive = false;
 
     // Diagnostic logging for truncation-related errors
     // Handle error-like objects that may have a message property but aren't Error instances
