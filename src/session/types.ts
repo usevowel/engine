@@ -12,6 +12,7 @@ import type { SoundbirdAgent } from '../services/agent-provider';
 import type { ILLMAgent } from '../services/agents';
 import type { SessionTurnTracker } from './turn-tracker';
 import type { PlaybackRingBuffer } from '../lib/echo-cancellation';
+import type { ServerBargeInDetector } from '../lib/server-barge-in';
 
 export interface InterruptPolicyConfig {
   mode?: 'immediate' | 'confirm_before_cancel';
@@ -86,6 +87,10 @@ export interface SessionData {
   echoSuppressionMode?: 'off' | 'client' | 'server' | 'auto';
   /** True when the client has an active barge-in detector (engine trusts incoming audio). */
   isClientBargeInActive?: boolean;
+  /** Per-session server-side barge-in detector; lazily constructed on first input_audio_buffer.append. Not persisted across hibernation. */
+  serverBargeInDetector?: ServerBargeInDetector;
+  /** When true, the user is on headphones (no acoustic echo path); server barge-in detector is skipped to avoid false positives. Set by client via session.update echoSuppression.headphones. */
+  headphoneMode?: boolean;
   interruptPolicy?: InterruptPolicyConfig;
   pendingInterrupt?: PendingInterruptState | null;
   vadEnabled: boolean;

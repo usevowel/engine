@@ -11,6 +11,7 @@ import { transcribeAudio, isValidAudioBuffer } from '../../services/transcriptio
 import { SessionManager } from '../SessionManager';
 import { sendError } from '../utils/errors';
 import { residualEchoCancel } from '../../lib/echo-cancellation';
+import { ServerBargeInDetector } from '../../lib/server-barge-in';
 import { 
   sendSpeechStarted, 
   sendSpeechStopped, 
@@ -78,6 +79,13 @@ let generateResponse: (ws: ServerWebSocket<SessionData>, options?: any) => Promi
  */
 export function setGenerateResponse(fn: typeof generateResponse): void {
   generateResponse = fn;
+}
+
+function shouldRunServerBargeIn(data: SessionData): boolean {
+  if (data.headphoneMode) return false;
+  if (typeof Bun !== 'undefined' && Bun.env?.SERVER_BARGE_IN_ENABLED === 'true') return true;
+  if (typeof process !== 'undefined' && process.env?.SERVER_BARGE_IN_ENABLED === 'true') return true;
+  return false;
 }
 
 function getPcmSampleRateHz(data: SessionData): number {
@@ -310,6 +318,18 @@ export async function handleAudioAppend(ws: ServerWebSocket<SessionData>, event:
   ) {
     const result = residualEchoCancel(audioChunk, data.playbackRingBuffer, getPcmSampleRateHz(data));
     processedChunk = result.residual;
+
+    if (shouldRunServerBargeIn(data)) {
+      if (!data.serverBargeInDetector) {
+        data.serverBargeInDetector = new ServerBargeInDetector();
+      }
+      const barge = data.serverBargeInDetector.observe(result, getPcmSampleRateHz(data), data.totalAudioMs);
+      if (barge.triggered) {
+        getEventSystem().info(EventCategory.AUDIO, `🎙️ Server barge-in fired: rms=${barge.metrics.micRms.toFixed(4)} ratio=${barge.metrics.residualRatio.toFixed(3)}`);
+        handleInterruptSpeechStart(ws, 'server_barge_in', data.totalAudioMs);
+        data.serverBargeInDetector.reset();
+      }
+    }
   }
   
   // Get providers

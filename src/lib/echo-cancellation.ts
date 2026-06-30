@@ -29,8 +29,8 @@ export const MIN_DELAY_MS = 20;
 /** Maximum candidate echo delay (ms) searched during cross-correlation. */
 export const MAX_DELAY_MS = 420;
 
-/** Default ring buffer capacity: 0.5s @ 24kHz mono PCM16 = 12000 samples. */
-export const MAX_PLAYBACK_SAMPLES = Math.ceil(0.5 * 24000);
+/** Default ring buffer capacity: 3.0s @ 24kHz mono PCM16 = 72000 samples. */
+export const MAX_PLAYBACK_SAMPLES = Math.ceil(3.0 * 24000);
 
 /** Coarse delay search step in samples (~3.3ms at 24kHz). */
 const DELAY_STEP_SAMPLES = 80;

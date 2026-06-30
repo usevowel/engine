@@ -104,6 +104,7 @@ export async function executeSpeakTool(
       sessionData.outputAudioStartedAt = Date.now();
     }
     sendAudioDelta(ws, responseId, itemId, chunk);
+    sessionData.playbackRingBuffer?.push(chunk);
   }
   
   sessionData.outputAudioActive = false;

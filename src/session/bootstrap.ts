@@ -6,6 +6,7 @@ import type { SessionData } from './types';
 import type { RuntimeConfig } from '../config/RuntimeConfig';
 import { getEventSystem, EventCategory } from '../events';
 import { PlaybackRingBuffer } from '../lib/echo-cancellation';
+import { ServerBargeInDetector } from '../lib/server-barge-in';
 
 const DEFAULT_VALUES = {
   speakingRate: 1.2,
@@ -177,6 +178,7 @@ export function buildSessionConfig(
     responseTurnAbort: null,
     outputAudioActive: false,
     playbackRingBuffer: new PlaybackRingBuffer(),
+    serverBargeInDetector: new ServerBargeInDetector(),
     interruptPolicy: {
       mode: 'confirm_before_cancel',
     },

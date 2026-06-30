@@ -169,6 +169,11 @@ export const config = {
     minSilenceDurationMs: parseInt(getEnv('VAD_MIN_SILENCE_MS') || '550', 10),
     speechPadMs: parseInt(getEnv('VAD_SPEECH_PAD_MS') || '0', 10),
   },
+
+  // Server-side Barge-In Detector (residual-based echo detection alongside Silero VAD)
+  serverBargeIn: {
+    enabled: getEnv('SERVER_BARGE_IN_ENABLED') === 'true', // Default disabled — calibrate in manual testing before enabling
+  },
   
   // Turn Detection (LLM-based)
   turnDetection: {

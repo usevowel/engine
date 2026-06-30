@@ -458,7 +458,10 @@ export async function handleSessionUpdate(ws: ServerWebSocket<SessionData>, even
   if (clientEchoConfig) {
     data.echoSuppressionMode = clientEchoConfig.mode ?? 'auto';
     data.isClientBargeInActive = clientEchoConfig.mode === 'client' || clientEchoConfig.mode === 'auto';
-    getEventSystem().info(EventCategory.SESSION, `🔇 Echo suppression: mode=${data.echoSuppressionMode}, clientBargeIn=${data.isClientBargeInActive}`);
+    if (clientEchoConfig.headphones === true) {
+      data.headphoneMode = true;
+    }
+    getEventSystem().info(EventCategory.SESSION, `🔇 Echo suppression: mode=${data.echoSuppressionMode}, clientBargeIn=${data.isClientBargeInActive}, headphones=${data.headphoneMode ?? false}`);
   }
   
   // Send confirmation with actual turn_detection config
