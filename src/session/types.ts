@@ -11,6 +11,7 @@ import type { RuntimeConfig } from '../config/RuntimeConfig';
 import type { SoundbirdAgent } from '../services/agent-provider';
 import type { ILLMAgent } from '../services/agents';
 import type { SessionTurnTracker } from './turn-tracker';
+import type { PlaybackRingBuffer } from '../lib/echo-cancellation';
 
 export interface InterruptPolicyConfig {
   mode?: 'immediate' | 'confirm_before_cancel';
@@ -77,6 +78,8 @@ export interface SessionData {
    * non-audio turns (text-only tools, silent LLM thinking).
    */
   outputAudioActive: boolean;
+  /** Ring buffer of recently transmitted TTS audio (PCM16 24kHz) used for residual-based echo cancellation. Only active when VAD is NON-integrated. */
+  playbackRingBuffer?: PlaybackRingBuffer;
   /** Timestamp of the first audio delta sent in the current output turn. */
   outputAudioStartedAt?: number;
   /** Echo suppression mode negotiated with the client. */

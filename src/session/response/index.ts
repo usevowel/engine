@@ -977,6 +977,7 @@ export async function generateResponse(ws: ServerWebSocket<SessionData>, options
                   data.outputAudioStartedAt = Date.now();
                 }
                 sendAudioDelta(ws, responseId, itemId, chunk);
+                data.playbackRingBuffer?.push(chunk);
               }
 
               logResponseDebug('completed streaming audio delta batch', {
@@ -1351,6 +1352,7 @@ export async function generateResponse(ws: ServerWebSocket<SessionData>, options
             data.outputAudioStartedAt = Date.now();
           }
           sendAudioDelta(ws, responseId, itemId, chunk);
+          data.playbackRingBuffer?.push(chunk);
         }
 
         logResponseDebug('completed buffered audio delta batch', {
@@ -1512,6 +1514,7 @@ export async function generateResponse(ws: ServerWebSocket<SessionData>, options
               data.outputAudioStartedAt = Date.now();
             }
             sendAudioDelta(ws, responseId, itemId, chunk);
+            data.playbackRingBuffer?.push(chunk);
           }
 
           logResponseDebug('completed final audio delta batch', {

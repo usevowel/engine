@@ -5,6 +5,7 @@
 import type { SessionData } from './types';
 import type { RuntimeConfig } from '../config/RuntimeConfig';
 import { getEventSystem, EventCategory } from '../events';
+import { PlaybackRingBuffer } from '../lib/echo-cancellation';
 
 const DEFAULT_VALUES = {
   speakingRate: 1.2,
@@ -175,6 +176,7 @@ export function buildSessionConfig(
     currentResponseId: null,
     responseTurnAbort: null,
     outputAudioActive: false,
+    playbackRingBuffer: new PlaybackRingBuffer(),
     interruptPolicy: {
       mode: 'confirm_before_cancel',
     },

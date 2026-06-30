@@ -10,6 +10,7 @@ import { generateEventId, generateItemId } from '../../lib/protocol';
 import { transcribeAudio, isValidAudioBuffer } from '../../services/transcription';
 import { SessionManager } from '../SessionManager';
 import { sendError } from '../utils/errors';
+import { residualEchoCancel } from '../../lib/echo-cancellation';
 import { 
   sendSpeechStarted, 
   sendSpeechStopped, 
@@ -298,12 +299,17 @@ export async function handleAudioAppend(ws: ServerWebSocket<SessionData>, event:
     data.smallChunkWarningLogged = true;
   }
   
-  // Echo suppression safety net: attenuate incoming audio while the AI is
-  // outputting TTS, unless the client has an active barge-in detector (in
-  // which case the client already filtered echo and we trust the incoming audio).
+  // Echo suppression: residual-based cancellation for standalone server Silero VAD and
+  // client-side Silero VAD paths only. Integrated VAD providers (name suffix `-integrated`)
+  // manage their own audio pipeline and must receive unmodified mic input.
   let processedChunk = audioChunk;
-  if (data.outputAudioActive && !data.isClientBargeInActive) {
-    processedChunk = attenuatePCM16(audioChunk, ECHO_ATTENUATION_FACTOR);
+  if (
+    data.outputAudioActive &&
+    !data.isClientBargeInActive &&
+    !SessionManager.isVADIntegrated(data.runtimeConfig!)
+  ) {
+    const result = residualEchoCancel(audioChunk, data.playbackRingBuffer, getPcmSampleRateHz(data));
+    processedChunk = result.residual;
   }
   
   // Get providers
