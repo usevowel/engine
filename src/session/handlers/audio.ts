@@ -316,10 +316,10 @@ export async function handleAudioAppend(ws: ServerWebSocket<SessionData>, event:
     !data.isClientBargeInActive &&
     !SessionManager.isVADIntegrated(data.runtimeConfig!)
   ) {
-    const result = residualEchoCancel(audioChunk, data.playbackRingBuffer, getPcmSampleRateHz(data));
-    processedChunk = result.residual;
+    processedChunk = attenuatePCM16(audioChunk, ECHO_ATTENUATION_FACTOR);
 
-    if (shouldRunServerBargeIn(data)) {
+    if (shouldRunServerBargeIn(data) && data.playbackRingBuffer) {
+      const result = residualEchoCancel(audioChunk, data.playbackRingBuffer, getPcmSampleRateHz(data));
       if (!data.serverBargeInDetector) {
         data.serverBargeInDetector = new ServerBargeInDetector();
       }
@@ -329,6 +329,7 @@ export async function handleAudioAppend(ws: ServerWebSocket<SessionData>, event:
         handleInterruptSpeechStart(ws, 'server_barge_in', data.totalAudioMs);
         data.serverBargeInDetector.reset();
       }
+      processedChunk = result.residual;
     }
   }
   
