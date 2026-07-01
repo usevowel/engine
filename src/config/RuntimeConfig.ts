@@ -127,6 +127,11 @@ export interface RuntimeConfig {
     temperature?: number;
     maxTokens?: number;
   };
+
+  // Echo suppression / server-side barge-in detector
+  echoSuppression?: {
+    serverBargeInEnabled: boolean;
+  };
 }
 
 /**

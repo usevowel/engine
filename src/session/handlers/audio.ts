@@ -83,6 +83,7 @@ export function setGenerateResponse(fn: typeof generateResponse): void {
 
 function shouldRunServerBargeIn(data: SessionData): boolean {
   if (data.headphoneMode) return false;
+  if (data.runtimeConfig?.echoSuppression?.serverBargeInEnabled) return true;
   if (typeof Bun !== 'undefined' && Bun.env?.SERVER_BARGE_IN_ENABLED === 'true') return true;
   if (typeof process !== 'undefined' && process.env?.SERVER_BARGE_IN_ENABLED === 'true') return true;
   return false;
@@ -316,10 +317,12 @@ export async function handleAudioAppend(ws: ServerWebSocket<SessionData>, event:
     !data.isClientBargeInActive &&
     !SessionManager.isVADIntegrated(data.runtimeConfig!)
   ) {
-    processedChunk = attenuatePCM16(audioChunk, ECHO_ATTENUATION_FACTOR);
+    const bargeInEnabled = shouldRunServerBargeIn(data) && !!data.playbackRingBuffer;
 
-    if (shouldRunServerBargeIn(data) && data.playbackRingBuffer) {
+    if (bargeInEnabled) {
       const result = residualEchoCancel(audioChunk, data.playbackRingBuffer, getPcmSampleRateHz(data));
+      processedChunk = result.residual;
+
       if (!data.serverBargeInDetector) {
         data.serverBargeInDetector = new ServerBargeInDetector();
       }
@@ -329,7 +332,8 @@ export async function handleAudioAppend(ws: ServerWebSocket<SessionData>, event:
         handleInterruptSpeechStart(ws, 'server_barge_in', data.totalAudioMs);
         data.serverBargeInDetector.reset();
       }
-      processedChunk = result.residual;
+    } else {
+      processedChunk = attenuatePCM16(audioChunk, ECHO_ATTENUATION_FACTOR);
     }
   }
   

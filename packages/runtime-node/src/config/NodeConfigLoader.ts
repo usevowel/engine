@@ -239,6 +239,10 @@ export class NodeConfigLoader {
         temperature: env.SUBAGENT_TEMPERATURE ? parseFloat(env.SUBAGENT_TEMPERATURE) : undefined,
         maxTokens: env.SUBAGENT_MAX_TOKENS ? parseInt(env.SUBAGENT_MAX_TOKENS, 10) : undefined,
       },
+
+      echoSuppression: {
+        serverBargeInEnabled: env.SERVER_BARGE_IN_ENABLED === 'true',
+      },
     };
   }
 }
