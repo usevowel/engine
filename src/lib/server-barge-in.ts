@@ -22,10 +22,16 @@
 
 import type { ResidualEchoCancelResult } from './echo-cancellation';
 
-/** Default mic RMS threshold (must be calibrated post-residualEchoCancel). */
-export const DEFAULT_MIC_THRESHOLD = 0.018;
-/** Default residual ratio threshold (fraction of mic energy NOT explained by echo). */
-export const DEFAULT_RESIDUAL_THRESHOLD = 0.62;
+/** Default mic RMS threshold for the residual signal (after echo cancellation).
+ *  Pure echo residual stays below 0.05; user speech residual is typically 0.06-0.11.
+ *  Raised from pibot's 0.018 (which was calibrated on raw mic, not post-cancellation). */
+export const DEFAULT_MIC_THRESHOLD = 0.05;
+
+/** Default residual ratio threshold (fraction of original mic energy NOT explained by echo).
+ *  Lowered from pibot's 0.62 — that value blocks mixed echo+speech because the echo
+ *  component drives the ratio down even when speech is present in the residual.
+ *  0.10 keeps a minimal floor to filter imperfect-cancellation artifacts. */
+export const DEFAULT_RESIDUAL_THRESHOLD = 0.10;
 /** Default consecutive frames before barge-in fires. */
 export const DEFAULT_TRIGGER_FRAMES = 5;
 

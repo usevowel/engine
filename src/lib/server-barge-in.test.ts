@@ -58,14 +58,14 @@ describe('ServerBargeInDetector', () => {
     const det = new ServerBargeInDetector();
     for (let i = 0; i < DEFAULT_TRIGGER_FRAMES - 1; i++) {
       const r = makeResult({
-        residual: pcm16WithRms(0.05), // RMS well above threshold
+        residual: pcm16WithRms(0.06), // RMS well above threshold
         micEnergy: 100,
         echoEnergy: 5, // residual ratio = 95/100 = 0.95
       });
       expect(det.observe(r, 24000, i * 100).triggered).toBe(false);
     }
     const r = makeResult({
-      residual: pcm16WithRms(0.05),
+      residual: pcm16WithRms(0.06),
       micEnergy: 100,
       echoEnergy: 5,
     });
@@ -76,7 +76,7 @@ describe('ServerBargeInDetector', () => {
     const det = new ServerBargeInDetector();
     const speech = () =>
       makeResult({
-        residual: pcm16WithRms(0.05),
+        residual: pcm16WithRms(0.06),
         micEnergy: 100,
         echoEnergy: 5,
       });
@@ -100,7 +100,7 @@ describe('ServerBargeInDetector', () => {
     const det = new ServerBargeInDetector();
     const speech = () =>
       makeResult({
-        residual: pcm16WithRms(0.05),
+        residual: pcm16WithRms(0.06),
         micEnergy: 100,
         echoEnergy: 5,
       });
@@ -118,7 +118,7 @@ describe('ServerBargeInDetector', () => {
   test('micEnergy floor prevents division-by-zero', () => {
     const det = new ServerBargeInDetector();
     const r = makeResult({
-      residual: pcm16WithRms(0.05),
+      residual: pcm16WithRms(0.06),
       micEnergy: 1e-10, // below 1e-7 floor
       echoEnergy: 0,
     });
@@ -131,7 +131,7 @@ describe('ServerBargeInDetector', () => {
     const det = new ServerBargeInDetector();
     expect(det.isArmed()).toBe(false);
     const speech = makeResult({
-      residual: pcm16WithRms(0.05),
+      residual: pcm16WithRms(0.06),
       micEnergy: 100,
       echoEnergy: 5,
     });
@@ -144,12 +144,12 @@ describe('ServerBargeInDetector', () => {
   test('emits metrics on every observe call', () => {
     const det = new ServerBargeInDetector();
     const r = makeResult({
-      residual: pcm16WithRms(0.05),
+      residual: pcm16WithRms(0.06),
       micEnergy: 100,
       echoEnergy: 5,
     });
     const result = det.observe(r, 24000, 0);
-    expect(result.metrics.micRms).toBeCloseTo(0.05, 2);
+    expect(result.metrics.micRms).toBeCloseTo(0.06, 2);
     expect(result.metrics.residualRatio).toBeCloseTo(0.95, 2);
     expect(result.metrics.micEnergy).toBe(100);
     expect(result.metrics.echoEnergy).toBe(5);
@@ -161,7 +161,7 @@ describe('ServerBargeInDetector', () => {
       triggerFrames: 3,
     });
     const r = makeResult({
-      residual: pcm16WithRms(0.05), // below custom threshold
+      residual: pcm16WithRms(0.06), // below custom threshold
       micEnergy: 100,
       echoEnergy: 5,
     });
@@ -171,8 +171,8 @@ describe('ServerBargeInDetector', () => {
   });
 
   test('defaults are exported and match pibot calibration', () => {
-    expect(DEFAULT_MIC_THRESHOLD).toBe(0.018);
-    expect(DEFAULT_RESIDUAL_THRESHOLD).toBe(0.62);
+    expect(DEFAULT_MIC_THRESHOLD).toBe(0.05);
+    expect(DEFAULT_RESIDUAL_THRESHOLD).toBe(0.10);
     expect(DEFAULT_TRIGGER_FRAMES).toBe(5);
   });
 
@@ -180,7 +180,7 @@ describe('ServerBargeInDetector', () => {
     const det = new ServerBargeInDetector();
     const speech = () =>
       makeResult({
-        residual: pcm16WithRms(0.05),
+        residual: pcm16WithRms(0.06),
         micEnergy: 100,
         echoEnergy: 5,
       });
@@ -214,7 +214,7 @@ describe('ServerBargeInDetector', () => {
   test('residualRatio is clamped to 0 when echoEnergy exceeds micEnergy', () => {
     const det = new ServerBargeInDetector();
     const r = makeResult({
-      residual: pcm16WithRms(0.05),
+      residual: pcm16WithRms(0.06),
       micEnergy: 10,
       echoEnergy: 50, // echo > mic (over-subtraction edge case)
     });
