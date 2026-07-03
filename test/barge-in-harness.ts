@@ -15,7 +15,7 @@
 
 import { PlaybackRingBuffer, residualEchoCancel } from '../src/lib/echo-cancellation';
 import { ServerBargeInDetector } from '../src/lib/server-barge-in';
-import { writeFileSync, mkdirSync } from 'node:fs';
+import { writeFileSync, mkdirSync, readFileSync, existsSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -23,6 +23,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const SAVE_WAV = process.argv.includes('--save-wav');
 const WAV_DIR = join(__dirname, 'barge-in-wav-output');
+const REAL_TTS_PATH = join(__dirname, 'barge-in-assets', 'tts-long-response.pcm');
 
 const SR = 24000;
 const FRAME_SAMPLES = 2048;
@@ -100,6 +101,22 @@ function extractChunk(input: Float32Array, start: number, length: number): Float
     chunk[i] = start + i < end ? input[start + i] : 0;
   }
   return chunk;
+}
+
+function scaleAmplitude(input: Float32Array, factor: number): Float32Array {
+  const out = new Float32Array(input.length);
+  for (let i = 0; i < input.length; i++) {
+    out[i] = Math.max(-1, Math.min(1, input[i] * factor));
+  }
+  return out;
+}
+
+function loadRealTtsAudio(path: string): Float32Array | null {
+  if (!existsSync(path)) {
+    return null;
+  }
+  const bytes = new Uint8Array(readFileSync(path));
+  return pcm16BytesToFloat32(bytes);
 }
 
 // ---------------------------------------------------------------------------
@@ -188,6 +205,7 @@ interface FrameResult {
 interface ScenarioResult {
   name: string;
   description: string;
+  audioSource: string;
   frames: FrameResult[];
   fired: boolean;
   fireFrame: number | null;
@@ -200,27 +218,41 @@ function runScenario(
   micAudio: Float32Array,
   delayMs: number = 100,
   ringBufferSeconds: number = RING_BUFFER_SECONDS,
+  audioSource: string = 'synthetic',
 ): ScenarioResult {
   const ring = new PlaybackRingBuffer(Math.ceil(ringBufferSeconds * SR));
   const detector = new ServerBargeInDetector();
-  const delaySamples = Math.round((delayMs / 1000) * SR);
-
-  // Push TTS audio into ring buffer (simulating what the engine does when AI speaks)
-  const ttsPcm16 = float32ToPcm16Bytes(ttsAudio);
-  ring.push(ttsPcm16);
 
   const totalFrames = Math.ceil(micAudio.length / FRAME_SAMPLES);
   const frames: FrameResult[] = [];
   let fired = false;
   let fireFrame: number | null = null;
+  const residualAudio = SAVE_WAV ? new Float32Array(micAudio.length) : null;
 
   for (let f = 0; f < totalFrames; f++) {
     const start = f * FRAME_SAMPLES;
+
+    // Push the TTS chunk for this frame BEFORE processing the mic frame.
+    // This simulates real-time playback: the engine pushes TTS audio to the
+    // ring buffer as it is played to the speaker, and the mic picks it up
+    // after a delay. With interleaved pushing, the ring buffer contains the
+    // correct recent playback history when each mic frame is processed,
+    // which is essential for real (non-periodic) speech to be cancelled.
+    const ttsChunk = extractChunk(ttsAudio, start, FRAME_SAMPLES);
+    ring.push(float32ToPcm16Bytes(ttsChunk));
+
     const micChunk = extractChunk(micAudio, start, FRAME_SAMPLES);
     const micPcm16 = float32ToPcm16Bytes(micChunk);
 
     const result = residualEchoCancel(micPcm16, ring, SR);
     const barge = detector.observe(result, SR, Math.round(f * FRAME_MS));
+
+    if (residualAudio) {
+      const resFloat = pcm16BytesToFloat32(result.residual);
+      for (let i = 0; i < resFloat.length && start + i < residualAudio.length; i++) {
+        residualAudio[start + i] = resFloat[i];
+      }
+    }
 
     const frameResult: FrameResult = {
       frame: f,
@@ -240,24 +272,13 @@ function runScenario(
     }
   }
 
-  if (SAVE_WAV) {
+  if (SAVE_WAV && residualAudio) {
     saveWav(`${name}_tts`, ttsAudio);
     saveWav(`${name}_mic`, micAudio);
-    const residualAudio = new Float32Array(micAudio.length);
-    for (let f = 0; f < totalFrames; f++) {
-      const start = f * FRAME_SAMPLES;
-      const micChunk = extractChunk(micAudio, start, FRAME_SAMPLES);
-      const micPcm16 = float32ToPcm16Bytes(micChunk);
-      const result = residualEchoCancel(micPcm16, ring, SR);
-      const resFloat = pcm16BytesToFloat32(result.residual);
-      for (let i = 0; i < resFloat.length && start + i < residualAudio.length; i++) {
-        residualAudio[start + i] = resFloat[i];
-      }
-    }
     saveWav(`${name}_residual`, residualAudio);
   }
 
-  return { name, description, frames, fired, fireFrame };
+  return { name, description, audioSource, frames, fired, fireFrame };
 }
 
 // ---------------------------------------------------------------------------
@@ -268,6 +289,7 @@ function printScenarioResult(result: ScenarioResult): void {
   console.log(`\n${'='.repeat(80)}`);
   console.log(`Scenario: ${result.name}`);
   console.log(`Description: ${result.description}`);
+  console.log(`Audio source: ${result.audioSource}`);
   console.log(`Fired: ${result.fired ? 'YES' : 'NO'}${result.fireFrame !== null ? ` (frame ${result.fireFrame}, ~${(result.fireFrame * FRAME_MS).toFixed(0)}ms)` : ''}`);
   console.log(`${'─'.repeat(80)}`);
   console.log(`${'frame'.padStart(5)} ${'ms'.padStart(6)} ${'micRms'.padStart(8)} ${'resRatio'.padStart(8)} ${'echoEng'.padStart(10)} ${'micEng'.padStart(10)} ${'cons'.padStart(5)} ${'triggered'}`);
@@ -312,23 +334,40 @@ async function main(): Promise<void> {
     console.log(`\n📁 WAV files will be saved to: ${WAV_DIR}`);
   }
 
+  const realTtsAudio = loadRealTtsAudio(REAL_TTS_PATH);
+  if (realTtsAudio) {
+    const dur = realTtsAudio.length / SR;
+    console.log(`\n🎙️  Loaded real TTS audio: ${REAL_TTS_PATH}`);
+    console.log(`   Duration: ${dur.toFixed(2)}s, Samples: ${realTtsAudio.length}`);
+  } else {
+    console.log(`\n⚠️  Real TTS audio not found at ${REAL_TTS_PATH}`);
+    console.log(`   Run \`bun run test/generate-tts-assets.ts\` first.`);
+    console.log(`   Falling back to synthetic TTS for all scenarios.\n`);
+  }
+
   const results: ScenarioResult[] = [];
 
   // --- Scenario 1: Pure Echo (mic = delayed copy of TTS) ---
   // Expected: should NOT trigger (residual ratio should be low — echo is explained)
   {
-    const ttsDurationSamples = SR * 2;
-    const tts = generateTtsLike(ttsDurationSamples, 0.5);
+    const useReal = realTtsAudio !== null;
+    const tts = useReal ? realTtsAudio! : generateTtsLike(SR * 2, 0.5);
+    const ttsDurationSamples = tts.length;
     const delayMs = 100;
     const delaySamples = Math.round((delayMs / 1000) * SR);
     const echoFull = delaySignal(tts, delaySamples);
     const mic = extractChunk(echoFull, 0, ttsDurationSamples);
+    const ringSeconds = useReal
+      ? Math.max(RING_BUFFER_SECONDS, ttsDurationSamples / SR + delayMs / 1000 + 0.5)
+      : RING_BUFFER_SECONDS;
     const result = runScenario(
       '1-pure-echo',
       'Mic = delayed copy of TTS (pure echo, no user speech). Should NOT trigger.',
       tts,
       mic,
       delayMs,
+      ringSeconds,
+      useReal ? 'real TTS (tts-long-response.pcm)' : 'synthetic',
     );
     printScenarioResult(result);
     results.push(result);
@@ -354,19 +393,25 @@ async function main(): Promise<void> {
   // --- Scenario 3: Mixed (mic = delayed TTS + speech) ---
   // Expected: SHOULD trigger (speech component makes residual ratio high)
   {
-    const ttsDurationSamples = SR * 2;
-    const tts = generateTtsLike(ttsDurationSamples, 0.5);
+    const useReal = realTtsAudio !== null;
+    const tts = useReal ? realTtsAudio! : generateTtsLike(SR * 2, 0.5);
+    const ttsDurationSamples = tts.length;
     const delayMs = 120;
     const delaySamples = Math.round((delayMs / 1000) * SR);
     const echo = extractChunk(delaySignal(tts, delaySamples), 0, ttsDurationSamples);
     const speech = generateSpeechLike(ttsDurationSamples, 0.25);
     const mixed = mixSignals(echo, speech);
+    const ringSeconds = useReal
+      ? Math.max(RING_BUFFER_SECONDS, ttsDurationSamples / SR + delayMs / 1000 + 0.5)
+      : RING_BUFFER_SECONDS;
     const result = runScenario(
       '3-mixed-echo-plus-speech',
       'Mic = delayed TTS echo + user speech. SHOULD trigger (speech breaks through echo).',
       tts,
       mixed,
       delayMs,
+      ringSeconds,
+      useReal ? 'real TTS echo + synthetic speech' : 'synthetic',
     );
     printScenarioResult(result);
     results.push(result);
@@ -409,17 +454,25 @@ async function main(): Promise<void> {
   // --- Scenario 6: Low-amplitude echo (quiet TTS, mic = echo) ---
   // Expected: should NOT trigger (low micRms after echo cancellation)
   {
-    const ttsDurationSamples = SR * 2;
-    const tts = generateTtsLike(ttsDurationSamples, 0.15); // quiet TTS
+    const useReal = realTtsAudio !== null;
+    const tts = useReal
+      ? scaleAmplitude(realTtsAudio!, 0.3)
+      : generateTtsLike(SR * 2, 0.15);
+    const ttsDurationSamples = tts.length;
     const delayMs = 80;
     const delaySamples = Math.round((delayMs / 1000) * SR);
     const echo = extractChunk(delaySignal(tts, delaySamples), 0, ttsDurationSamples);
+    const ringSeconds = useReal
+      ? Math.max(RING_BUFFER_SECONDS, ttsDurationSamples / SR + delayMs / 1000 + 0.5)
+      : RING_BUFFER_SECONDS;
     const result = runScenario(
       '6-quiet-echo',
       'Mic = delayed copy of quiet TTS. Should NOT trigger (low residual after cancellation).',
       tts,
       echo,
       delayMs,
+      ringSeconds,
+      useReal ? 'real TTS (scaled 0.3x)' : 'synthetic',
     );
     printScenarioResult(result);
     results.push(result);
